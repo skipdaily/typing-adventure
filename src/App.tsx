@@ -65,6 +65,11 @@ const MATH_LIST_HARD = mapToGameItem([
 const TIME_LIMIT = 60; // 60 seconds
 const USERS_STORAGE_KEY = 'typingAdventureUsers';
 const CURRENT_USER_STORAGE_KEY = 'typingAdventureCurrentUser';
+const SUPABASE_SESSION_STORAGE_KEY = 'typingAdventureSupabaseSession';
+const ENV = (import.meta as ImportMeta & { env: Record<string, string | undefined> }).env;
+const SUPABASE_URL = ENV.VITE_SUPABASE_URL?.replace(/\/$/, '');
+const SUPABASE_PUBLISHABLE_KEY = ENV.VITE_SUPABASE_PUBLISHABLE_KEY;
+const SUPABASE_ENABLED = Boolean(SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY);
 
 type GameState = 'LOBBY' | 'COUNTDOWN' | 'PLAYING' | 'GAMEOVER';
 type Difficulty = 'easy' | 'medium' | 'hard';
@@ -75,6 +80,7 @@ interface ModeStats {
   gamesPlayed: number;
   bestScore: number;
   bestAccuracy: number;
+  totalPoints?: number;
 }
 
 interface GameHistoryEntry {
@@ -86,8 +92,10 @@ interface GameHistoryEntry {
 }
 
 interface UserAccount {
+  id?: string;
   username: string;
-  password: string;
+  password?: string;
+  sessionToken?: string;
   createdAt: string;
   avatar: string;
   selectedBg: string;
@@ -116,6 +124,85 @@ type LeaderboardData = Record<string, LeaderboardEntry[]>;
 type UserAccounts = Record<string, UserAccount>;
 
 const normalizeUsername = (name: string) => name.trim().toLowerCase();
+
+const supabaseRpc = async <T,>(functionName: string, payload: Record<string, unknown>): Promise<T> => {
+  if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+    throw new Error('Supabase is not configured.');
+  }
+
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${functionName}`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_PUBLISHABLE_KEY,
+      Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    let message = 'Supabase request failed.';
+    try {
+      const error = await response.json();
+      message = error.message || error.details || message;
+    } catch {
+      message = await response.text();
+    }
+    throw new Error(message);
+  }
+
+  return response.json();
+};
+
+const dashboardToUser = (dashboard: any, sessionToken?: string): UserAccount => ({
+  id: dashboard.id,
+  username: dashboard.username,
+  sessionToken,
+  createdAt: dashboard.createdAt || new Date().toISOString(),
+  avatar: dashboard.avatar || '🐶',
+  selectedBg: dashboard.selectedBg || 'paper',
+  coins: dashboard.coins || 0,
+  ownedAvatars: dashboard.ownedAvatars || [],
+  ownedBackgrounds: dashboard.ownedBackgrounds || [],
+  unlockedThemes: dashboard.unlockedThemes || [],
+  totalPointsEarned: dashboard.totalPointsEarned || 0,
+  gamesPlayed: dashboard.gamesPlayed || 0,
+  bestScore: dashboard.bestScore || 0,
+  bestAccuracy: dashboard.bestAccuracy ?? 100,
+  achievements: dashboard.achievements || [],
+  modeStats: dashboard.modeStats || {},
+  recentGames: (dashboard.recentGames || []).map((game: any) => ({
+    mode: game.mode,
+    difficulty: game.difficulty,
+    score: game.score || 0,
+    accuracy: game.accuracy ?? 100,
+    date: game.date ? new Date(game.date).toLocaleString() : ''
+  }))
+});
+
+const leaderboardRowToUser = (row: any, mode: GameMode): UserAccount => ({
+  username: row.username,
+  createdAt: '',
+  avatar: row.avatar || '🐶',
+  selectedBg: 'paper',
+  coins: 0,
+  ownedAvatars: [],
+  ownedBackgrounds: [],
+  unlockedThemes: [],
+  totalPointsEarned: row.total_points_earned || 0,
+  gamesPlayed: row.games_played || 0,
+  bestScore: row.best_score || 0,
+  bestAccuracy: row.best_accuracy ?? 100,
+  achievements: Array.from({ length: Number(row.achievements_count || 0) }, (_, index) => `Achievement ${index + 1}`),
+  modeStats: {
+    [mode]: {
+      gamesPlayed: row.games_played || 0,
+      bestScore: row.best_score || 0,
+      bestAccuracy: row.best_accuracy ?? 100
+    }
+  },
+  recentGames: []
+});
 
 const createNewUser = (username: string, password: string): UserAccount => ({
   username: username.trim(),
@@ -168,6 +255,7 @@ export default function App() {
   const [countdown, setCountdown] = useState<number | null>(null);
   const [leaderboard, setLeaderboard] = useState<LeaderboardData>({});
   const [accounts, setAccounts] = useState<UserAccounts>({});
+  const [remoteLeaderboard, setRemoteLeaderboard] = useState<UserAccount[]>([]);
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
   const [authMode, setAuthMode] = useState<AuthMode>('create');
   const [authUsername, setAuthUsername] = useState('');
@@ -227,7 +315,14 @@ export default function App() {
     setCurrentUser(userWithAchievements);
     applyUserProfile(userWithAchievements);
     localStorage.setItem(CURRENT_USER_STORAGE_KEY, normalizeUsername(userWithAchievements.username));
-    persistAccounts({ ...accounts, [normalizeUsername(userWithAchievements.username)]: userWithAchievements });
+    if (userWithAchievements.sessionToken) {
+      localStorage.setItem(SUPABASE_SESSION_STORAGE_KEY, userWithAchievements.sessionToken);
+    }
+    setAccounts(prev => {
+      const nextAccounts = { ...prev, [normalizeUsername(userWithAchievements.username)]: userWithAchievements };
+      localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(nextAccounts));
+      return nextAccounts;
+    });
   };
 
   const updateCurrentUser = (updater: (user: UserAccount) => UserAccount) => {
@@ -244,7 +339,21 @@ export default function App() {
     setShowCredentialWarning(false);
   };
 
-  const handleAuthSubmit = () => {
+  const refreshRemoteLeaderboard = async (mode: GameMode = gameMode) => {
+    if (!SUPABASE_ENABLED) return;
+
+    try {
+      const rows = await supabaseRpc<any[]>('list_leaderboard', {
+        p_mode: mode,
+        p_limit: 10
+      });
+      setRemoteLeaderboard(rows.map(row => leaderboardRowToUser(row, mode)));
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handleAuthSubmit = async () => {
     const normalized = normalizeUsername(authUsername);
     const username = authUsername.trim();
 
@@ -254,6 +363,21 @@ export default function App() {
     }
 
     if (authMode === 'login') {
+      if (SUPABASE_ENABLED) {
+        try {
+          const result = await supabaseRpc<{ sessionToken: string; player: any }>('login_player', {
+            p_username: username,
+            p_password: authPassword
+          });
+          saveCurrentUser(dashboardToUser(result.player, result.sessionToken));
+          clearAuthForm();
+          await refreshRemoteLeaderboard();
+        } catch (error) {
+          setAuthError(error instanceof Error ? error.message : 'Could not log in.');
+        }
+        return;
+      }
+
       const foundUser = accounts[normalized];
       if (!foundUser || foundUser.password !== authPassword) {
         setAuthError('That username or password is not right.');
@@ -266,7 +390,7 @@ export default function App() {
       return;
     }
 
-    if (accounts[normalized]) {
+    if (!SUPABASE_ENABLED && accounts[normalized]) {
       setAuthError('That username is already taken on this browser.');
       return;
     }
@@ -280,15 +404,43 @@ export default function App() {
     setShowCredentialWarning(true);
   };
 
-  const confirmCreateUser = () => {
+  const confirmCreateUser = async () => {
+    if (SUPABASE_ENABLED) {
+      try {
+        const result = await supabaseRpc<{ sessionToken: string; player: any }>('create_player', {
+          p_username: authUsername,
+          p_password: authPassword
+        });
+        saveCurrentUser(dashboardToUser(result.player, result.sessionToken));
+        clearAuthForm();
+        setGameState('LOBBY');
+        await refreshRemoteLeaderboard();
+      } catch (error) {
+        setShowCredentialWarning(false);
+        setAuthError(error instanceof Error ? error.message : 'Could not create user.');
+      }
+      return;
+    }
+
     const newUser = createNewUser(authUsername, authPassword);
     saveCurrentUser(newUser);
     clearAuthForm();
     setGameState('LOBBY');
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    if (SUPABASE_ENABLED && currentUser?.sessionToken) {
+      try {
+        await supabaseRpc<boolean>('logout_player', {
+          p_session_token: currentUser.sessionToken
+        });
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
     localStorage.removeItem(CURRENT_USER_STORAGE_KEY);
+    localStorage.removeItem(SUPABASE_SESSION_STORAGE_KEY);
     setCurrentUser(null);
     setGameState('LOBBY');
     setShowShop(false);
@@ -305,6 +457,23 @@ export default function App() {
 
   // Load saved users
   useEffect(() => {
+    if (SUPABASE_ENABLED) {
+      const savedSessionToken = localStorage.getItem(SUPABASE_SESSION_STORAGE_KEY);
+      if (savedSessionToken) {
+        supabaseRpc<any>('get_my_dashboard', {
+          p_session_token: savedSessionToken
+        })
+          .then(dashboard => saveCurrentUser(dashboardToUser(dashboard, savedSessionToken)))
+          .catch(error => {
+            console.error(error);
+            localStorage.removeItem(SUPABASE_SESSION_STORAGE_KEY);
+            localStorage.removeItem(CURRENT_USER_STORAGE_KEY);
+          });
+      }
+      refreshRemoteLeaderboard();
+      return;
+    }
+
     const savedUsers = localStorage.getItem(USERS_STORAGE_KEY);
     let parsedUsers: UserAccounts = {};
 
@@ -332,6 +501,10 @@ export default function App() {
       }
     }
   }, []);
+
+  useEffect(() => {
+    refreshRemoteLeaderboard(gameMode);
+  }, [gameMode]);
 
   // Timer Effect
   useEffect(() => {
@@ -399,6 +572,21 @@ export default function App() {
       }
 
       if (currentUser) {
+        if (SUPABASE_ENABLED && currentUser.sessionToken) {
+          supabaseRpc<any>('unlock_theme', {
+            p_session_token: currentUser.sessionToken,
+            p_theme_id: name
+          })
+            .then(() => supabaseRpc<any>('update_player_style', {
+              p_session_token: currentUser.sessionToken,
+              p_avatar: nextAvatar,
+              p_selected_bg: nextBg
+            }))
+            .then(dashboard => saveCurrentUser(dashboardToUser(dashboard, currentUser.sessionToken)))
+            .catch(error => console.error(error));
+          return;
+        }
+
         updateCurrentUser(user => ({
           ...user,
           avatar: nextAvatar,
@@ -502,7 +690,7 @@ export default function App() {
     setGameState('COUNTDOWN');
   };
 
-  const endGame = () => {
+  const endGame = async () => {
     setGameState('GAMEOVER');
     confetti({
       particleCount: 150,
@@ -514,6 +702,25 @@ export default function App() {
     const currentAccuracy = getAccuracy();
     const newCoins = coins + score;
     setCoins(newCoins);
+
+    if (SUPABASE_ENABLED && currentUser?.sessionToken) {
+      try {
+        const dashboard = await supabaseRpc<any>('record_game_result', {
+          p_session_token: currentUser.sessionToken,
+          p_mode: gameMode,
+          p_difficulty: difficulty,
+          p_score: score,
+          p_accuracy: currentAccuracy,
+          p_correct_keystrokes: correctKeystrokes,
+          p_total_keystrokes: totalKeystrokes
+        });
+        saveCurrentUser(dashboardToUser(dashboard, currentUser.sessionToken));
+        await refreshRemoteLeaderboard(gameMode);
+      } catch (error) {
+        console.error(error);
+      }
+      return;
+    }
 
     if (currentUser) {
       const currentModeStats = currentUser.modeStats[gameMode] || {
@@ -655,8 +862,23 @@ export default function App() {
     }
   }
 
-  const handleBuyAvatar = (id: string, price: number) => {
+  const handleBuyAvatar = async (id: string, price: number) => {
     if (coins >= price && !ownedAvatars.includes(id)) {
+      if (SUPABASE_ENABLED && currentUser?.sessionToken) {
+        try {
+          const dashboard = await supabaseRpc<any>('purchase_shop_item', {
+            p_session_token: currentUser.sessionToken,
+            p_item_type: 'avatar',
+            p_item_id: id
+          });
+          saveCurrentUser(dashboardToUser(dashboard, currentUser.sessionToken));
+          confetti({ particleCount: 50, spread: 60, origin: { y: 0.8 }, colors: ['#FFD700'] });
+        } catch (error) {
+          setCodeMessage({ text: error instanceof Error ? error.message : 'Could not buy character.', type: 'error' });
+        }
+        return;
+      }
+
       const newCoins = coins - price;
       const newOwned = [...ownedAvatars, id];
       setCoins(newCoins);
@@ -672,8 +894,23 @@ export default function App() {
     }
   };
 
-  const handleBuyBg = (id: string, price: number) => {
+  const handleBuyBg = async (id: string, price: number) => {
     if (coins >= price && !ownedBackgrounds.includes(id)) {
+      if (SUPABASE_ENABLED && currentUser?.sessionToken) {
+        try {
+          const dashboard = await supabaseRpc<any>('purchase_shop_item', {
+            p_session_token: currentUser.sessionToken,
+            p_item_type: 'background',
+            p_item_id: id
+          });
+          saveCurrentUser(dashboardToUser(dashboard, currentUser.sessionToken));
+          confetti({ particleCount: 50, spread: 60, origin: { y: 0.8 }, colors: ['#3b82f6'] });
+        } catch (error) {
+          setCodeMessage({ text: error instanceof Error ? error.message : 'Could not buy background.', type: 'error' });
+        }
+        return;
+      }
+
       const newCoins = coins - price;
       const newOwned = [...ownedBackgrounds, id];
       setCoins(newCoins);
@@ -689,8 +926,24 @@ export default function App() {
     }
   };
 
-  const handleRedeemCode = () => {
+  const handleRedeemCode = async () => {
     const c = shopCode.toLowerCase().trim();
+    if (SUPABASE_ENABLED && currentUser?.sessionToken) {
+      try {
+        const dashboard = await supabaseRpc<any>('redeem_code', {
+          p_session_token: currentUser.sessionToken,
+          p_code: c
+        });
+        saveCurrentUser(dashboardToUser(dashboard, currentUser.sessionToken));
+        setCodeMessage({ text: 'Code redeemed!', type: 'success' });
+        setShopCode('');
+        confetti({ particleCount: 50, spread: 60 });
+      } catch (error) {
+        setCodeMessage({ text: error instanceof Error ? error.message : 'Invalid code.', type: 'error' });
+      }
+      return;
+    }
+
     if (c === 'freecoins100') {
       const newCoins = coins + 100;
       setCoins(newCoins);
@@ -706,6 +959,30 @@ export default function App() {
     } else {
       setCodeMessage({ text: 'Invalid code.', type: 'error' });
     }
+  };
+
+  const handleOpenProfile = async (username: string) => {
+    const normalized = normalizeUsername(username);
+
+    if (SUPABASE_ENABLED) {
+      try {
+        const dashboard = await supabaseRpc<any>('get_player_dashboard', {
+          p_username: username
+        });
+        const profile = dashboardToUser(dashboard);
+        setAccounts(prev => {
+          const nextAccounts = { ...prev, [normalized]: profile };
+          localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(nextAccounts));
+          return nextAccounts;
+        });
+        setSelectedProfileName(normalized);
+      } catch (error) {
+        console.error(error);
+      }
+      return;
+    }
+
+    setSelectedProfileName(normalized);
   };
 
   const renderAuth = () => (
@@ -1122,7 +1399,7 @@ export default function App() {
       return renderDashboard(accounts[selectedProfileName], () => setSelectedProfileName(null));
     }
 
-    const topUsers = (Object.values(accounts) as UserAccount[])
+    const topUsers = (SUPABASE_ENABLED ? remoteLeaderboard : (Object.values(accounts) as UserAccount[]))
       .filter(user => (user.modeStats[gameMode]?.gamesPlayed || 0) > 0)
       .sort((a, b) => {
         const bStats = b.modeStats[gameMode];
@@ -1335,6 +1612,17 @@ export default function App() {
                 onClick={() => {
                   setAvatar(emoji);
                   if (currentUser) {
+                    if (SUPABASE_ENABLED && currentUser.sessionToken) {
+                      supabaseRpc<any>('update_player_style', {
+                        p_session_token: currentUser.sessionToken,
+                        p_avatar: emoji,
+                        p_selected_bg: selectedBg
+                      })
+                        .then(dashboard => saveCurrentUser(dashboardToUser(dashboard, currentUser.sessionToken)))
+                        .catch(error => console.error(error));
+                      return;
+                    }
+
                     updateCurrentUser(user => ({
                       ...user,
                       avatar: emoji
@@ -1364,6 +1652,17 @@ export default function App() {
                 onClick={() => {
                   setSelectedBg(bg.id);
                   if (currentUser) {
+                    if (SUPABASE_ENABLED && currentUser.sessionToken) {
+                      supabaseRpc<any>('update_player_style', {
+                        p_session_token: currentUser.sessionToken,
+                        p_avatar: avatar,
+                        p_selected_bg: bg.id
+                      })
+                        .then(dashboard => saveCurrentUser(dashboardToUser(dashboard, currentUser.sessionToken)))
+                        .catch(error => console.error(error));
+                      return;
+                    }
+
                     updateCurrentUser(user => ({
                       ...user,
                       selectedBg: bg.id
@@ -1426,7 +1725,7 @@ export default function App() {
               return (
               <button
                 key={entry.username}
-                onClick={() => setSelectedProfileName(normalizeUsername(entry.username))}
+                onClick={() => handleOpenProfile(entry.username)}
                 className="bg-white p-4 rounded-2xl shadow-sm border-2 border-slate-100 flex items-center gap-3 text-left hover:border-amber-200 hover:scale-[1.01] transition-all"
               >
                  <div className="text-2xl">{entry.avatar}</div>
