@@ -94,6 +94,8 @@ interface GameHistoryEntry {
 interface UserAccount {
   id?: string;
   username: string;
+  displayName: string;
+  avatarName: string;
   password?: string;
   sessionToken?: string;
   createdAt: string;
@@ -157,6 +159,8 @@ const supabaseRpc = async <T,>(functionName: string, payload: Record<string, unk
 const dashboardToUser = (dashboard: any, sessionToken?: string): UserAccount => ({
   id: dashboard.id,
   username: dashboard.username,
+  displayName: dashboard.displayName || dashboard.username,
+  avatarName: dashboard.avatarName || 'Guide',
   sessionToken,
   createdAt: dashboard.createdAt || new Date().toISOString(),
   avatar: dashboard.avatar || '🐶',
@@ -182,6 +186,8 @@ const dashboardToUser = (dashboard: any, sessionToken?: string): UserAccount => 
 
 const leaderboardRowToUser = (row: any, mode: GameMode): UserAccount => ({
   username: row.username,
+  displayName: row.display_name || row.username,
+  avatarName: row.avatar_name || 'Guide',
   createdAt: '',
   avatar: row.avatar || '🐶',
   selectedBg: 'paper',
@@ -206,6 +212,8 @@ const leaderboardRowToUser = (row: any, mode: GameMode): UserAccount => ({
 
 const createNewUser = (username: string, password: string): UserAccount => ({
   username: username.trim(),
+  displayName: username.trim(),
+  avatarName: 'Guide',
   password,
   createdAt: new Date().toISOString(),
   avatar: '🐶',
@@ -265,8 +273,12 @@ export default function App() {
   const [showCredentialWarning, setShowCredentialWarning] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
   const [selectedProfileName, setSelectedProfileName] = useState<string | null>(null);
+  const [profileDisplayName, setProfileDisplayName] = useState('');
+  const [profileAvatarName, setProfileAvatarName] = useState('');
+  const [profileMessage, setProfileMessage] = useState({ text: '', type: '' });
   
   const [playerName, setPlayerName] = useState('Explorer');
+  const [avatarName, setAvatarName] = useState('Guide');
   const [avatar, setAvatar] = useState('🐶');
   const [selectedBg, setSelectedBg] = useState('paper');
   const [unlockedThemes, setUnlockedThemes] = useState<string[]>([]);
@@ -296,7 +308,8 @@ export default function App() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const applyUserProfile = (user: UserAccount) => {
-    setPlayerName(user.username);
+    setPlayerName(user.displayName || user.username);
+    setAvatarName(user.avatarName || 'Guide');
     setAvatar(user.avatar);
     setSelectedBg(user.selectedBg);
     setUnlockedThemes(user.unlockedThemes);
@@ -338,6 +351,13 @@ export default function App() {
     setAuthError('');
     setShowCredentialWarning(false);
   };
+
+  useEffect(() => {
+    if (currentUser) {
+      setProfileDisplayName(currentUser.displayName || currentUser.username);
+      setProfileAvatarName(currentUser.avatarName || 'Guide');
+    }
+  }, [currentUser]);
 
   const refreshRemoteLeaderboard = async (mode: GameMode = gameMode) => {
     if (!SUPABASE_ENABLED) return;
@@ -985,6 +1005,41 @@ export default function App() {
     setSelectedProfileName(normalized);
   };
 
+  const handleSaveProfile = async () => {
+    if (!currentUser) return;
+
+    const nextDisplayName = profileDisplayName.trim() || currentUser.username;
+    const nextAvatarName = profileAvatarName.trim() || 'Guide';
+    setProfileMessage({ text: '', type: '' });
+
+    if (SUPABASE_ENABLED && currentUser.sessionToken) {
+      try {
+        const dashboard = await supabaseRpc<any>('update_player_profile', {
+          p_session_token: currentUser.sessionToken,
+          p_display_name: nextDisplayName,
+          p_avatar_name: nextAvatarName,
+          p_avatar: avatar,
+          p_selected_bg: selectedBg
+        });
+        saveCurrentUser(dashboardToUser(dashboard, currentUser.sessionToken));
+        setProfileMessage({ text: 'Profile saved!', type: 'success' });
+      } catch (error) {
+        setProfileMessage({ text: error instanceof Error ? error.message : 'Could not save profile.', type: 'error' });
+      }
+      return;
+    }
+
+    const updatedUser = {
+      ...currentUser,
+      displayName: nextDisplayName,
+      avatarName: nextAvatarName,
+      avatar,
+      selectedBg
+    };
+    saveCurrentUser(updatedUser);
+    setProfileMessage({ text: 'Profile saved!', type: 'success' });
+  };
+
   const renderAuth = () => (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -1117,6 +1172,7 @@ export default function App() {
 
   const renderDashboard = (profile: UserAccount, onClose: () => void) => {
     const modeRows = Object.entries(profile.modeStats);
+    const isCurrentUserDashboard = currentUser?.username === profile.username;
 
     return (
       <motion.div
@@ -1131,8 +1187,8 @@ export default function App() {
               {profile.avatar}
             </div>
             <div className="min-w-0">
-              <h1 className="text-4xl md:text-5xl font-black text-slate-800 truncate">{profile.username}</h1>
-              <p className="text-slate-500 font-bold mt-1">Player Dashboard</p>
+              <h1 className="text-4xl md:text-5xl font-black text-slate-800 truncate">{profile.displayName || profile.username}</h1>
+              <p className="text-slate-500 font-bold mt-1">{profile.avatarName || 'Guide'} · @{profile.username}</p>
             </div>
           </div>
           <button
@@ -1142,6 +1198,47 @@ export default function App() {
             <X size={24} />
           </button>
         </div>
+
+        {isCurrentUserDashboard && (
+          <section className="bg-slate-50 border-4 border-slate-100 rounded-3xl p-6 mb-8">
+            <h2 className="text-2xl font-black text-slate-800 mb-4 flex items-center gap-2">
+              <User className="text-emerald-500" /> Edit Profile
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <label className="block">
+                <span className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-2">Your Real Name</span>
+                <input
+                  type="text"
+                  value={profileDisplayName}
+                  onChange={(e) => setProfileDisplayName(e.target.value)}
+                  className="w-full text-xl font-black text-slate-800 bg-white border-4 border-slate-100 focus:border-emerald-400 rounded-xl px-4 py-3 outline-none transition-all"
+                />
+              </label>
+              <label className="block">
+                <span className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-2">Avatar Name</span>
+                <input
+                  type="text"
+                  value={profileAvatarName}
+                  onChange={(e) => setProfileAvatarName(e.target.value)}
+                  className="w-full text-xl font-black text-slate-800 bg-white border-4 border-slate-100 focus:border-emerald-400 rounded-xl px-4 py-3 outline-none transition-all"
+                />
+              </label>
+            </div>
+            <div className="mt-4 flex flex-col sm:flex-row gap-3 sm:items-center">
+              <button
+                onClick={handleSaveProfile}
+                className="bg-emerald-500 text-white font-black px-6 py-3 rounded-2xl border-b-4 border-emerald-700 hover:bg-emerald-400 active:border-b-0 transition-all"
+              >
+                Save Profile
+              </button>
+              {profileMessage.text && (
+                <div className={`font-black ${profileMessage.type === 'error' ? 'text-rose-500' : 'text-emerald-600'}`}>
+                  {profileMessage.text}
+                </div>
+              )}
+            </div>
+          </section>
+        )}
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-yellow-50 border-4 border-yellow-100 rounded-3xl p-5">
@@ -1460,7 +1557,8 @@ export default function App() {
           <div className="bg-slate-50 border-4 border-slate-100 rounded-xl px-4 py-4 text-center">
             <div className="text-4xl mb-2">{avatar}</div>
             <div className="text-3xl font-black text-slate-800 truncate">{playerName}</div>
-            <div className="text-xs uppercase font-black tracking-wider text-slate-400 mt-2">Username and password stay locked</div>
+            <div className="text-sm font-black text-slate-500 mt-1 truncate">{avatarName}</div>
+            <div className="text-xs uppercase font-black tracking-wider text-slate-400 mt-2">@{currentUser?.username} stays locked</div>
           </div>
         </div>
 
@@ -1731,7 +1829,7 @@ export default function App() {
                  <div className="text-2xl">{entry.avatar}</div>
                  <div className="flex-1 min-w-0">
                    <div className="font-bold text-slate-800 truncate">{i + 1}. {entry.username}</div>
-                   <div className="text-xs text-slate-400 font-bold uppercase tracking-wider">{stats?.bestAccuracy || 0}% acc · {entry.achievements.length} awards</div>
+                   <div className="text-xs text-slate-400 font-bold uppercase tracking-wider truncate">{entry.displayName || entry.username} · {stats?.bestAccuracy || 0}% acc</div>
                  </div>
                  <div className="font-black text-yellow-600 text-xl flex items-center gap-1">💰{stats?.bestScore || 0}</div>
               </button>

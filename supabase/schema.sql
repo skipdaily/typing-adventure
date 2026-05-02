@@ -38,6 +38,8 @@ end $$;
 create table if not exists public.players (
   id uuid primary key default gen_random_uuid(),
   username citext not null unique,
+  display_name text not null default '',
+  avatar_name text not null default 'Guide',
   password_hash text not null,
   created_at timestamptz not null default now(),
   last_login_at timestamptz,
@@ -292,6 +294,8 @@ as $$
   select jsonb_build_object(
     'id', p.id,
     'username', p.username,
+    'displayName', coalesce(nullif(p.display_name, ''), p.username::text),
+    'avatarName', p.avatar_name,
     'createdAt', p.created_at,
     'avatar', p.avatar,
     'selectedBg', p.selected_bg,
@@ -490,6 +494,35 @@ begin
 
   update public.players
   set
+    avatar = coalesce(nullif(p_avatar, ''), avatar),
+    selected_bg = coalesce(nullif(p_selected_bg, ''), selected_bg)
+  where id = v_player_id;
+
+  return public.player_dashboard(v_player_id);
+end;
+$$;
+
+create or replace function public.update_player_profile(
+  p_session_token text,
+  p_display_name text,
+  p_avatar_name text,
+  p_avatar text,
+  p_selected_bg text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public, private
+as $$
+declare
+  v_player_id uuid;
+begin
+  v_player_id := private.require_player_id(p_session_token);
+
+  update public.players
+  set
+    display_name = coalesce(nullif(trim(p_display_name), ''), username::text),
+    avatar_name = coalesce(nullif(trim(p_avatar_name), ''), 'Guide'),
     avatar = coalesce(nullif(p_avatar, ''), avatar),
     selected_bg = coalesce(nullif(p_selected_bg, ''), selected_bg)
   where id = v_player_id;
@@ -713,6 +746,8 @@ $$;
 create or replace function public.list_leaderboard(p_mode public.game_mode default null, p_limit integer default 10)
 returns table (
   username citext,
+  display_name text,
+  avatar_name text,
   avatar text,
   best_score integer,
   best_accuracy integer,
@@ -727,6 +762,8 @@ set search_path = public
 as $$
   select
     p.username,
+    coalesce(nullif(p.display_name, ''), p.username::text) as display_name,
+    p.avatar_name,
     p.avatar,
     coalesce(ms.best_score, p.best_score) as best_score,
     coalesce(ms.best_accuracy, p.best_accuracy) as best_accuracy,
@@ -770,6 +807,7 @@ grant execute on function public.logout_player(text) to anon, authenticated;
 grant execute on function public.get_my_dashboard(text) to anon, authenticated;
 grant execute on function public.get_player_dashboard(text) to anon, authenticated;
 grant execute on function public.update_player_style(text, text, text) to anon, authenticated;
+grant execute on function public.update_player_profile(text, text, text, text, text) to anon, authenticated;
 grant execute on function public.unlock_theme(text, text) to anon, authenticated;
 grant execute on function public.purchase_shop_item(text, public.shop_item_type, text) to anon, authenticated;
 grant execute on function public.redeem_code(text, text) to anon, authenticated;
