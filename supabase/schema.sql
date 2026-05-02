@@ -743,6 +743,8 @@ begin
 end;
 $$;
 
+drop function if exists public.list_leaderboard(public.game_mode, integer);
+
 create or replace function public.list_leaderboard(p_mode public.game_mode default null, p_limit integer default 10)
 returns table (
   username citext,
