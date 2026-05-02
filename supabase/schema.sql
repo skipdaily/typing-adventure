@@ -2,7 +2,8 @@
 -- Run this in Supabase SQL Editor first.
 -- Then run supabase/seed_shop_items.sql to load the shop catalog.
 
-create extension if not exists pgcrypto;
+create schema if not exists extensions;
+create extension if not exists pgcrypto with schema extensions;
 create extension if not exists citext;
 
 create schema if not exists private;
@@ -205,14 +206,14 @@ returns text
 language sql
 stable
 as $$
-  select encode(digest(p_token, 'sha256'), 'hex')
+  select encode(extensions.digest(p_token, 'sha256'), 'hex')
 $$;
 
 create or replace function private.require_player_id(p_session_token text)
 returns uuid
 language plpgsql
 security definer
-set search_path = public, private
+set search_path = public, private, extensions
 as $$
 declare
   v_player_id uuid;
@@ -377,10 +378,10 @@ begin
     raise exception 'Password must be at least 4 characters';
   end if;
 
-  v_token := encode(gen_random_bytes(32), 'hex');
+  v_token := encode(extensions.gen_random_bytes(32), 'hex');
 
   insert into public.players (username, password_hash)
-  values (v_clean_username, crypt(p_password, gen_salt('bf')))
+  values (v_clean_username, extensions.crypt(p_password, extensions.gen_salt('bf')))
   returning id into v_player_id;
 
   insert into public.player_sessions (player_id, token_hash)
@@ -399,7 +400,7 @@ create or replace function public.login_player(p_username text, p_password text)
 returns jsonb
 language plpgsql
 security definer
-set search_path = public, private
+set search_path = public, private, extensions
 as $$
 declare
   v_player public.players%rowtype;
@@ -410,11 +411,11 @@ begin
   from public.players
   where username = trim(p_username)::citext;
 
-  if v_player.id is null or v_player.password_hash <> crypt(p_password, v_player.password_hash) then
+  if v_player.id is null or v_player.password_hash <> extensions.crypt(p_password, v_player.password_hash) then
     raise exception 'Invalid username or password';
   end if;
 
-  v_token := encode(gen_random_bytes(32), 'hex');
+  v_token := encode(extensions.gen_random_bytes(32), 'hex');
 
   insert into public.player_sessions (player_id, token_hash)
   values (v_player.id, private.hash_token(v_token));
