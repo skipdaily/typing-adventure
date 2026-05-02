@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import { motion, AnimatePresence } from 'motion/react';
-import { Play, RotateCcw, Trophy, Timer, Target, Star, Volume2, ArrowLeft, ShoppingBag, X, Gift, User, Lock, LogOut, BarChart3 } from 'lucide-react';
+import { Play, RotateCcw, Trophy, Timer, Target, Star, Volume2, ArrowLeft, ShoppingBag, X, Gift, User, Lock, LogOut, BarChart3, MessageCircle, Send, Users, Plus } from 'lucide-react';
 import { EQUATIONS_LIST, FLIPPER_LIST, EMOJI_LIST, SCRAMBLE_LIST, OPPOSITES_LIST, GameItem } from './data';
 import { DEFAULT_AVATARS, DEFAULT_BACKGROUNDS, SECRET_BACKGROUNDS, SHOP_AVATARS, SHOP_BACKGROUNDS } from './shopData';
 
@@ -114,6 +114,42 @@ interface UserAccount {
   recentGames: GameHistoryEntry[];
 }
 
+interface PublicChatMessage {
+  id: string;
+  username: string;
+  displayName: string;
+  avatar: string;
+  message: string;
+  createdAt: string;
+}
+
+interface ChatPlayer {
+  username: string;
+  displayName: string;
+  avatar: string;
+}
+
+interface ChatThread {
+  id: string;
+  title?: string;
+  memberUsernames: string[];
+  memberNames: string[];
+  memberAvatars: string[];
+  lastMessage?: string;
+  lastMessageAt?: string;
+}
+
+interface ChatMessage {
+  id: string;
+  threadId: string;
+  username: string;
+  displayName: string;
+  avatar: string;
+  message: string;
+  createdAt: string;
+  isMine: boolean;
+}
+
 interface LeaderboardEntry {
   name: string;
   score: number;
@@ -210,6 +246,47 @@ const leaderboardRowToUser = (row: any, mode: GameMode): UserAccount => ({
   recentGames: []
 });
 
+const formatChatTime = (date?: string) => {
+  if (!date) return '';
+  return new Date(date).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+};
+
+const publicChatRowToMessage = (row: any): PublicChatMessage => ({
+  id: row.id,
+  username: row.username,
+  displayName: row.display_name || row.username,
+  avatar: row.avatar || '🐶',
+  message: row.message || '',
+  createdAt: row.created_at || new Date().toISOString()
+});
+
+const chatPlayerRowToPlayer = (row: any): ChatPlayer => ({
+  username: row.username,
+  displayName: row.display_name || row.username,
+  avatar: row.avatar || '🐶'
+});
+
+const chatThreadRowToThread = (row: any): ChatThread => ({
+  id: row.id,
+  title: row.title || '',
+  memberUsernames: row.member_usernames || [],
+  memberNames: row.member_names || [],
+  memberAvatars: row.member_avatars || [],
+  lastMessage: row.last_message || '',
+  lastMessageAt: row.last_message_at || ''
+});
+
+const chatMessageRowToMessage = (row: any): ChatMessage => ({
+  id: row.id,
+  threadId: row.thread_id,
+  username: row.username,
+  displayName: row.display_name || row.username,
+  avatar: row.avatar || '🐶',
+  message: row.message || '',
+  createdAt: row.created_at || new Date().toISOString(),
+  isMine: Boolean(row.is_mine)
+});
+
 const createNewUser = (username: string, password: string): UserAccount => ({
   username: username.trim(),
   displayName: username.trim(),
@@ -276,6 +353,17 @@ export default function App() {
   const [profileDisplayName, setProfileDisplayName] = useState('');
   const [profileAvatarName, setProfileAvatarName] = useState('');
   const [profileMessage, setProfileMessage] = useState({ text: '', type: '' });
+  const [publicChatMessages, setPublicChatMessages] = useState<PublicChatMessage[]>([]);
+  const [publicChatText, setPublicChatText] = useState('');
+  const [publicChatError, setPublicChatError] = useState('');
+  const [chatPlayers, setChatPlayers] = useState<ChatPlayer[]>([]);
+  const [chatThreads, setChatThreads] = useState<ChatThread[]>([]);
+  const [selectedChatThreadId, setSelectedChatThreadId] = useState<string | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [newChatMembers, setNewChatMembers] = useState<string[]>([]);
+  const [newChatTitle, setNewChatTitle] = useState('');
+  const [chatText, setChatText] = useState('');
+  const [chatError, setChatError] = useState('');
   
   const [playerName, setPlayerName] = useState('Explorer');
   const [avatarName, setAvatarName] = useState('Guide');
@@ -370,6 +458,162 @@ export default function App() {
       setRemoteLeaderboard(rows.map(row => leaderboardRowToUser(row, mode)));
     } catch (error) {
       console.error(error);
+    }
+  };
+
+  const loadPublicChat = async () => {
+    if (!SUPABASE_ENABLED) return;
+
+    try {
+      const rows = await supabaseRpc<any[]>('list_public_chat', {
+        p_limit: 30
+      });
+      setPublicChatMessages(rows.map(publicChatRowToMessage));
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const handlePostPublicChat = async () => {
+    const message = publicChatText.trim();
+    setPublicChatError('');
+
+    if (!message) {
+      setPublicChatError('Type a message first.');
+      return;
+    }
+
+    if (!SUPABASE_ENABLED || !currentUser?.sessionToken) {
+      setPublicChatError('Log in with Supabase to comment.');
+      return;
+    }
+
+    try {
+      const rows = await supabaseRpc<any[]>('post_public_chat', {
+        p_session_token: currentUser.sessionToken,
+        p_message: message
+      });
+      setPublicChatMessages(rows.map(publicChatRowToMessage));
+      setPublicChatText('');
+    } catch (error) {
+      setPublicChatError(error instanceof Error ? error.message : 'Could not send chat.');
+    }
+  };
+
+  const loadChatPlayers = async () => {
+    if (!SUPABASE_ENABLED || !currentUser?.sessionToken) return;
+
+    try {
+      const rows = await supabaseRpc<any[]>('list_chat_players', {
+        p_session_token: currentUser.sessionToken
+      });
+      setChatPlayers(rows.map(chatPlayerRowToPlayer));
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const loadChatMessages = async (threadId: string) => {
+    if (!SUPABASE_ENABLED || !currentUser?.sessionToken) return;
+
+    try {
+      const rows = await supabaseRpc<any[]>('list_chat_messages', {
+        p_session_token: currentUser.sessionToken,
+        p_thread_id: threadId,
+        p_limit: 50
+      });
+      setChatMessages(rows.map(chatMessageRowToMessage));
+    } catch (error) {
+      setChatError(error instanceof Error ? error.message : 'Could not load messages.');
+    }
+  };
+
+  const loadChatThreads = async (preferredThreadId?: string) => {
+    if (!SUPABASE_ENABLED || !currentUser?.sessionToken) return;
+
+    try {
+      const rows = await supabaseRpc<any[]>('list_chat_threads', {
+        p_session_token: currentUser.sessionToken
+      });
+      const threads = rows.map(chatThreadRowToThread);
+      const wantedThreadId = preferredThreadId || selectedChatThreadId;
+      const nextSelectedId = threads.some(thread => thread.id === wantedThreadId)
+        ? wantedThreadId || null
+        : threads[0]?.id || null;
+
+      setChatThreads(threads);
+      setSelectedChatThreadId(nextSelectedId);
+
+      if (nextSelectedId) {
+        await loadChatMessages(nextSelectedId);
+      } else {
+        setChatMessages([]);
+      }
+    } catch (error) {
+      setChatError(error instanceof Error ? error.message : 'Could not load chats.');
+    }
+  };
+
+  const toggleNewChatMember = (username: string) => {
+    setChatError('');
+    setNewChatMembers(prev => (
+      prev.includes(username)
+        ? prev.filter(member => member !== username)
+        : [...prev, username]
+    ));
+  };
+
+  const handleCreateChatThread = async () => {
+    if (!SUPABASE_ENABLED || !currentUser?.sessionToken) {
+      setChatError('Log in with Supabase to start chats.');
+      return;
+    }
+
+    if (newChatMembers.length === 0) {
+      setChatError('Choose at least one player.');
+      return;
+    }
+
+    try {
+      const threadId = await supabaseRpc<string>('create_chat_thread', {
+        p_session_token: currentUser.sessionToken,
+        p_member_usernames: newChatMembers,
+        p_title: newChatTitle.trim() || null
+      });
+      setNewChatMembers([]);
+      setNewChatTitle('');
+      setChatError('');
+      await loadChatThreads(threadId);
+    } catch (error) {
+      setChatError(error instanceof Error ? error.message : 'Could not start chat.');
+    }
+  };
+
+  const handleSendChatMessage = async () => {
+    const message = chatText.trim();
+
+    if (!message) {
+      setChatError('Type a message first.');
+      return;
+    }
+
+    if (!SUPABASE_ENABLED || !currentUser?.sessionToken || !selectedChatThreadId) {
+      setChatError('Choose a chat first.');
+      return;
+    }
+
+    try {
+      const rows = await supabaseRpc<any[]>('post_chat_message', {
+        p_session_token: currentUser.sessionToken,
+        p_thread_id: selectedChatThreadId,
+        p_message: message
+      });
+      setChatMessages(rows.map(chatMessageRowToMessage));
+      setChatText('');
+      setChatError('');
+      await loadChatThreads(selectedChatThreadId);
+    } catch (error) {
+      setChatError(error instanceof Error ? error.message : 'Could not send message.');
     }
   };
 
@@ -473,6 +717,14 @@ export default function App() {
     setCoins(0);
     setOwnedAvatars([]);
     setOwnedBackgrounds([]);
+    setChatPlayers([]);
+    setChatThreads([]);
+    setSelectedChatThreadId(null);
+    setChatMessages([]);
+    setNewChatMembers([]);
+    setNewChatTitle('');
+    setChatText('');
+    setChatError('');
   };
 
   // Load saved users
@@ -491,6 +743,7 @@ export default function App() {
           });
       }
       refreshRemoteLeaderboard();
+      loadPublicChat();
       return;
     }
 
@@ -521,6 +774,14 @@ export default function App() {
       }
     }
   }, []);
+
+  useEffect(() => {
+    if (SUPABASE_ENABLED && currentUser?.sessionToken) {
+      loadPublicChat();
+      loadChatPlayers();
+      loadChatThreads();
+    }
+  }, [currentUser?.sessionToken]);
 
   useEffect(() => {
     refreshRemoteLeaderboard(gameMode);
@@ -1173,6 +1434,13 @@ export default function App() {
   const renderDashboard = (profile: UserAccount, onClose: () => void) => {
     const modeRows = Object.entries(profile.modeStats);
     const isCurrentUserDashboard = currentUser?.username === profile.username;
+    const selectedChatThread = chatThreads.find(thread => thread.id === selectedChatThreadId);
+    const availableChatPlayers = chatPlayers.filter(player => !newChatMembers.includes(player.username));
+    const getChatThreadTitle = (thread: ChatThread) => {
+      if (thread.title) return thread.title;
+      const otherNames = thread.memberNames.filter((_, index) => thread.memberUsernames[index] !== currentUser?.username);
+      return otherNames.length > 0 ? otherNames.join(', ') : 'My Chat';
+    };
 
     return (
       <motion.div
@@ -1237,6 +1505,187 @@ export default function App() {
                 </div>
               )}
             </div>
+          </section>
+        )}
+
+        {isCurrentUserDashboard && (
+          <section className="bg-slate-50 border-4 border-slate-100 rounded-3xl p-6 mb-8">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+              <h2 className="text-2xl font-black text-slate-800 flex items-center gap-2">
+                <MessageCircle className="text-indigo-500" /> Messages
+              </h2>
+              <button
+                onClick={() => {
+                  loadChatPlayers();
+                  loadChatThreads();
+                }}
+                className="bg-white text-slate-500 font-black px-4 py-2 rounded-xl border-2 border-slate-100 hover:border-indigo-200 transition-all"
+              >
+                Refresh
+              </button>
+            </div>
+
+            {!SUPABASE_ENABLED ? (
+              <div className="text-slate-400 font-bold">Connect Supabase to use public and private chat.</div>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-5">
+                <div className="space-y-4">
+                  <div className="bg-white border-4 border-slate-100 rounded-3xl p-4">
+                    <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-2">Start a Chat</label>
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        if (e.target.value) toggleNewChatMember(e.target.value);
+                      }}
+                      className="w-full bg-slate-50 border-4 border-slate-100 rounded-xl px-3 py-3 font-black text-slate-700 outline-none focus:border-indigo-300"
+                    >
+                      <option value="">Choose a player...</option>
+                      {availableChatPlayers.map(player => (
+                        <option key={player.username} value={player.username}>
+                          {player.displayName} (@{player.username})
+                        </option>
+                      ))}
+                    </select>
+
+                    {newChatMembers.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        {newChatMembers.map(username => {
+                          const chosen = chatPlayers.find(player => player.username === username);
+                          return (
+                            <button
+                              key={username}
+                              onClick={() => toggleNewChatMember(username)}
+                              className="bg-indigo-50 text-indigo-700 border-2 border-indigo-100 rounded-xl px-3 py-2 text-sm font-black flex items-center gap-2"
+                            >
+                              {chosen?.avatar || '💬'} {chosen?.displayName || username}
+                              <X size={14} />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {newChatMembers.length > 1 && (
+                      <input
+                        type="text"
+                        value={newChatTitle}
+                        onChange={(e) => setNewChatTitle(e.target.value)}
+                        placeholder="Group chat name"
+                        className="mt-3 w-full bg-slate-50 border-4 border-slate-100 rounded-xl px-3 py-3 font-black text-slate-700 outline-none focus:border-indigo-300"
+                      />
+                    )}
+
+                    <button
+                      onClick={handleCreateChatThread}
+                      disabled={newChatMembers.length === 0}
+                      className={`mt-3 w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl font-black border-b-4 transition-all ${
+                        newChatMembers.length > 0
+                          ? 'bg-indigo-500 text-white border-indigo-700 hover:bg-indigo-400 active:border-b-0'
+                          : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
+                      }`}
+                    >
+                      <Plus size={18} /> Open Chat
+                    </button>
+                  </div>
+
+                  <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                    {chatThreads.length === 0 ? (
+                      <div className="text-slate-400 font-bold text-sm px-2">No chats yet.</div>
+                    ) : chatThreads.map(thread => (
+                      <button
+                        key={thread.id}
+                        onClick={() => {
+                          setSelectedChatThreadId(thread.id);
+                          loadChatMessages(thread.id);
+                        }}
+                        className={`w-full text-left border-4 rounded-2xl p-3 transition-all ${
+                          selectedChatThreadId === thread.id
+                            ? 'bg-indigo-50 border-indigo-200'
+                            : 'bg-white border-slate-100 hover:border-indigo-100'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Users size={18} className="text-indigo-500 shrink-0" />
+                          <div className="font-black text-slate-800 truncate">{getChatThreadTitle(thread)}</div>
+                        </div>
+                        <div className="text-xs font-bold text-slate-400 truncate mt-1">
+                          {thread.lastMessage || 'No messages yet'}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bg-white border-4 border-slate-100 rounded-3xl p-4 min-h-[380px] flex flex-col">
+                  {selectedChatThread ? (
+                    <>
+                      <div className="border-b-4 border-slate-100 pb-3 mb-3">
+                        <div className="font-black text-slate-800 text-xl truncate">{getChatThreadTitle(selectedChatThread)}</div>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {selectedChatThread.memberNames.map((name, index) => (
+                            <span key={`${selectedChatThread.id}-${selectedChatThread.memberUsernames[index]}`} className="text-xs font-black bg-slate-50 text-slate-500 border-2 border-slate-100 rounded-full px-2 py-1">
+                              {selectedChatThread.memberAvatars[index]} {name}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="flex-1 min-h-0 max-h-72 overflow-y-auto space-y-3 pr-1">
+                        {chatMessages.length === 0 ? (
+                          <div className="h-full flex items-center justify-center text-slate-400 font-bold text-center">
+                            Send the first message.
+                          </div>
+                        ) : chatMessages.map(message => (
+                          <div key={message.id} className={`flex gap-2 ${message.isMine ? 'justify-end' : 'justify-start'}`}>
+                            {!message.isMine && <div className="text-2xl shrink-0">{message.avatar}</div>}
+                            <div className={`max-w-[78%] rounded-2xl px-4 py-3 border-2 ${
+                              message.isMine
+                                ? 'bg-indigo-500 text-white border-indigo-600'
+                                : 'bg-slate-50 text-slate-700 border-slate-100'
+                            }`}>
+                              <div className={`text-[11px] font-black uppercase tracking-wider mb-1 ${message.isMine ? 'text-indigo-100' : 'text-slate-400'}`}>
+                                {message.displayName} · {formatChatTime(message.createdAt)}
+                              </div>
+                              <div className="font-bold break-words">{message.message}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          handleSendChatMessage();
+                        }}
+                        className="mt-3 flex gap-2"
+                      >
+                        <input
+                          type="text"
+                          value={chatText}
+                          onChange={(e) => setChatText(e.target.value)}
+                          placeholder="Message..."
+                          className="flex-1 min-w-0 bg-slate-50 border-4 border-slate-100 rounded-xl px-4 py-3 font-bold text-slate-700 outline-none focus:border-indigo-300"
+                        />
+                        <button className="bg-indigo-500 text-white rounded-xl px-4 border-b-4 border-indigo-700 hover:bg-indigo-400 active:border-b-0 transition-all" aria-label="Send message">
+                          <Send size={20} />
+                        </button>
+                      </form>
+                    </>
+                  ) : (
+                    <div className="flex-1 flex flex-col items-center justify-center text-center text-slate-400 font-bold">
+                      <MessageCircle size={42} className="mb-3 text-slate-300" />
+                      Pick or start a chat.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {chatError && (
+              <div className="mt-4 bg-rose-50 border-4 border-rose-100 text-rose-600 font-bold rounded-2xl px-4 py-3">
+                {chatError}
+              </div>
+            )}
           </section>
         )}
 
@@ -1806,37 +2255,98 @@ export default function App() {
         </button>
       </div>
 
-      {/* Right Column: Leaderboard */}
-      <div className="w-full md:w-80 flex flex-col bg-slate-50 p-6 rounded-3xl border-4 border-slate-100 md:self-stretch max-h-[600px] shrink-0">
-        <h2 className="text-2xl font-black text-slate-800 mb-6 uppercase tracking-tight flex items-center justify-center gap-2 shrink-0">
-          <Trophy className="text-amber-500" /> Top Earners
-        </h2>
-        {topUsers.length === 0 ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-slate-400 font-medium text-center">
-            <div className="text-4xl mb-4 opacity-50">🌟</div>
-            <p>No earners yet.<br/>Be the first!</p>
+      {/* Right Column: Leaderboard and Chat */}
+      <div className="w-full md:w-80 flex flex-col gap-4 md:self-stretch shrink-0">
+        <section className="bg-slate-50 p-6 rounded-3xl border-4 border-slate-100 flex flex-col min-h-[320px] md:max-h-[430px]">
+          <h2 className="text-2xl font-black text-slate-800 mb-6 uppercase tracking-tight flex items-center justify-center gap-2 shrink-0">
+            <Trophy className="text-amber-500" /> Top Earners
+          </h2>
+          {topUsers.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 font-medium text-center">
+              <div className="text-4xl mb-4 opacity-50">🌟</div>
+              <p>No earners yet.<br/>Be the first!</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-4 overflow-y-auto pr-1 pb-4">
+              {topUsers.map((entry, i) => {
+                const stats = entry.modeStats[gameMode];
+                return (
+                <button
+                  key={entry.username}
+                  onClick={() => handleOpenProfile(entry.username)}
+                  className="bg-white p-4 rounded-2xl shadow-sm border-2 border-slate-100 flex items-center gap-3 text-left hover:border-amber-200 hover:scale-[1.01] transition-all"
+                >
+                   <div className="text-2xl">{entry.avatar}</div>
+                   <div className="flex-1 min-w-0">
+                     <div className="font-bold text-slate-800 truncate">{i + 1}. {entry.username}</div>
+                     <div className="text-xs text-slate-400 font-bold uppercase tracking-wider truncate">{entry.displayName || entry.username} · {stats?.bestAccuracy || 0}% acc</div>
+                   </div>
+                   <div className="font-black text-yellow-600 text-xl flex items-center gap-1">💰{stats?.bestScore || 0}</div>
+                </button>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        <section className="bg-white p-4 rounded-3xl border-4 border-slate-100 flex flex-col min-h-[320px]">
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
+              <MessageCircle className="text-indigo-500" size={22} /> Chat
+            </h2>
+            <button
+              onClick={loadPublicChat}
+              className="text-xs font-black text-slate-400 hover:text-indigo-500 uppercase"
+            >
+              Refresh
+            </button>
           </div>
-        ) : (
-          <div className="flex flex-col gap-4 overflow-y-auto pr-1 pb-4">
-            {topUsers.map((entry, i) => {
-              const stats = entry.modeStats[gameMode];
-              return (
-              <button
-                key={entry.username}
-                onClick={() => handleOpenProfile(entry.username)}
-                className="bg-white p-4 rounded-2xl shadow-sm border-2 border-slate-100 flex items-center gap-3 text-left hover:border-amber-200 hover:scale-[1.01] transition-all"
-              >
-                 <div className="text-2xl">{entry.avatar}</div>
-                 <div className="flex-1 min-w-0">
-                   <div className="font-bold text-slate-800 truncate">{i + 1}. {entry.username}</div>
-                   <div className="text-xs text-slate-400 font-bold uppercase tracking-wider truncate">{entry.displayName || entry.username} · {stats?.bestAccuracy || 0}% acc</div>
-                 </div>
-                 <div className="font-black text-yellow-600 text-xl flex items-center gap-1">💰{stats?.bestScore || 0}</div>
-              </button>
-              );
-            })}
+
+          <div className="flex-1 min-h-0 max-h-56 overflow-y-auto space-y-3 pr-1">
+            {publicChatMessages.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-center text-slate-400 font-bold">
+                No comments yet.
+              </div>
+            ) : publicChatMessages.map(message => (
+              <div key={message.id} className="bg-slate-50 border-2 border-slate-100 rounded-2xl p-3">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xl">{message.avatar}</span>
+                  <div className="min-w-0">
+                    <div className="font-black text-slate-700 text-sm truncate">{message.displayName}</div>
+                    <div className="text-[11px] font-bold text-slate-400">@{message.username} · {formatChatTime(message.createdAt)}</div>
+                  </div>
+                </div>
+                <div className="font-bold text-slate-600 text-sm break-words">{message.message}</div>
+              </div>
+            ))}
           </div>
-        )}
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handlePostPublicChat();
+            }}
+            className="mt-3 flex gap-2"
+          >
+            <input
+              type="text"
+              value={publicChatText}
+              onChange={(e) => {
+                setPublicChatText(e.target.value);
+                setPublicChatError('');
+              }}
+              placeholder="Add comment..."
+              className="flex-1 min-w-0 bg-slate-50 border-4 border-slate-100 rounded-xl px-3 py-2 font-bold text-slate-700 outline-none focus:border-indigo-300"
+            />
+            <button className="bg-indigo-500 text-white rounded-xl px-3 border-b-4 border-indigo-700 hover:bg-indigo-400 active:border-b-0 transition-all" aria-label="Send public chat">
+              <Send size={18} />
+            </button>
+          </form>
+
+          {publicChatError && (
+            <div className="mt-2 text-xs font-black text-rose-500">{publicChatError}</div>
+          )}
+        </section>
       </div>
       </div>
     </motion.div>
