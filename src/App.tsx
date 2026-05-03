@@ -2510,115 +2510,100 @@ export default function App() {
     const isMatchCorrectSoFar = answerStr.startsWith(currentInput);
 
     return (
-      <div className="w-full max-w-6xl mx-auto flex flex-col gap-2 lg:gap-8 min-h-[calc(100dvh-0.75rem)] pb-[env(safe-area-inset-bottom)]" onClick={() => inputRef.current?.focus()}>
-        {/* Header Bar */}
-        <header className="sticky top-1 z-40 bg-white rounded-2xl p-2 lg:p-6 shadow-sm border-2 border-slate-100">
-          <div className="flex items-center justify-between gap-2 lg:grid lg:grid-cols-3">
-          <div className="flex items-center gap-2 lg:gap-4 min-w-0">
-            <button 
-              onClick={() => setGameState('LOBBY')}
-              className="w-9 h-9 lg:w-12 lg:h-12 rounded-xl bg-slate-100 border-2 border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors shrink-0"
-              title="Back to Menu"
+      <div className="w-full max-w-6xl mx-auto min-h-[calc(100dvh-0.5rem)] pb-[env(safe-area-inset-bottom)]" onClick={() => inputRef.current?.focus()}>
+        <section className="w-full bg-white rounded-[22px] xl:rounded-[40px] border-4 border-slate-100 shadow-xl flex flex-col overflow-hidden relative">
+          <div className="h-2 xl:h-4 bg-indigo-500 w-2/3"></div>
+
+          {floatingEgg && (
+            <button
+              key={floatingEgg.id}
+              onClick={(e) => {
+                e.stopPropagation();
+                inputRef.current?.focus();
+                setScore(s => s + 50);
+                setFloatingEgg(null);
+                confetti({
+                  particleCount: 50,
+                  spread: 60,
+                  origin: { x: floatingEgg.x / 100, y: floatingEgg.y / 100 },
+                  colors: ['#FFD700', '#FFA500']
+                });
+              }}
+              className="absolute z-50 text-5xl hover:scale-125 transition-transform animate-bounce cursor-pointer"
+              style={{ left: `${floatingEgg.x}%`, top: `${floatingEgg.y}%` }}
             >
-              <ArrowLeft className="w-5 h-5 lg:w-6 lg:h-6" strokeWidth={3} />
+              {floatingEgg.emoji}
             </button>
-            <div className="w-9 h-9 lg:w-12 lg:h-12 bg-orange-400 rounded-full flex items-center justify-center text-white text-xl lg:text-2xl font-bold border-b-4 border-orange-600 shrink-0">
-              {avatar}
-            </div>
-            <div className="min-w-0">
-              <p className="hidden sm:block text-xs uppercase tracking-widest font-bold text-slate-400">Player</p>
-              <h2 className="max-w-[7rem] sm:max-w-none text-sm lg:text-xl font-black text-slate-800 truncate">{playerName || 'Super Typer'}</h2>
-            </div>
-          </div>
+          )}
 
-          <div className="flex flex-col items-center lg:col-span-1">
-            <div className="bg-rose-50 px-3 lg:px-6 py-1.5 lg:py-2 rounded-full border-2 border-rose-200 flex items-center gap-2 lg:gap-3">
-              <Timer className="w-5 h-5 lg:w-6 lg:h-6 text-rose-500" />
-              <span className={`text-lg lg:text-2xl font-black font-mono tracking-tighter ${timeLeft <= 10 ? 'text-rose-600 animate-pulse' : 'text-rose-600'}`}>{timeLeft}s</span>
-            </div>
-          </div>
-          
-          <div className="hidden lg:flex justify-end gap-2">
-            <div className="w-8 h-8 rounded-lg bg-sky-100 border border-sky-200"></div>
-            <div className="w-8 h-8 rounded-lg bg-sky-200 border border-sky-300"></div>
-            <div className="w-8 h-8 rounded-lg bg-sky-300 border border-sky-400"></div>
-          </div>
-          </div>
-        </header>
+          <div className="p-2 sm:p-3 xl:p-8 flex flex-col gap-2 xl:gap-6">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <button
+                  onClick={() => setGameState('LOBBY')}
+                  className="w-9 h-9 xl:w-12 xl:h-12 rounded-xl bg-slate-100 border-2 border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors shrink-0"
+                  title="Back to Menu"
+                >
+                  <ArrowLeft className="w-5 h-5 xl:w-6 xl:h-6" strokeWidth={3} />
+                </button>
+                <div className="w-9 h-9 xl:w-12 xl:h-12 bg-orange-400 rounded-full flex items-center justify-center text-white text-xl xl:text-2xl font-bold border-b-4 border-orange-600 shrink-0">
+                  {avatar}
+                </div>
+                <div className="min-w-0">
+                  <p className="hidden sm:block text-[10px] uppercase tracking-widest font-bold text-slate-400">Player</p>
+                  <h2 className="max-w-[8rem] sm:max-w-[12rem] text-sm xl:text-xl font-black text-slate-800 truncate">{playerName || 'Super Typer'}</h2>
+                </div>
+              </div>
 
-        <main className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-2 lg:gap-8 items-start">
-          {/* Sidebar Stats */}
-          <aside className="sticky top-[3.9rem] lg:top-[7rem] z-30 lg:col-span-3 grid grid-cols-2 lg:flex lg:flex-col gap-2 lg:gap-4">
-            <div className="bg-white p-2.5 lg:p-6 rounded-2xl lg:rounded-3xl border-b-4 lg:border-b-8 border-r-4 lg:border-r-8 border-yellow-100 shadow-sm min-w-0">
-              <p className="text-[10px] lg:text-xs font-black uppercase text-yellow-500 mb-0.5 lg:mb-1 tracking-tighter">Coins Earned</p>
-              <p className="text-2xl lg:text-5xl font-black text-yellow-600 flex items-center gap-1">💰{score}</p>
-            </div>
-            
-            <div className="bg-white p-2.5 lg:p-6 rounded-2xl lg:rounded-3xl border-b-4 lg:border-b-8 border-r-4 lg:border-r-8 border-emerald-100 shadow-sm min-w-0">
-              <p className="text-[10px] lg:text-xs font-black uppercase text-emerald-400 mb-0.5 lg:mb-1 tracking-tighter">Accuracy</p>
-              <p className="text-2xl lg:text-5xl font-black text-emerald-600">{getAccuracy()}<span className="text-base lg:text-2xl">%</span></p>
+              <div className="grid grid-cols-3 gap-1.5 sm:gap-2 flex-1 min-w-[260px]">
+                <div className="rounded-xl border-2 border-rose-200 bg-rose-50 px-2 py-1 text-center">
+                  <div className="text-[9px] sm:text-[10px] font-black uppercase text-rose-400 tracking-tighter">Timer</div>
+                  <div className={`flex items-center justify-center gap-1 text-lg sm:text-xl xl:text-2xl font-black font-mono ${timeLeft <= 10 ? 'text-rose-600 animate-pulse' : 'text-rose-600'}`}>
+                    <Timer className="w-4 h-4 sm:w-5 sm:h-5" />
+                    {timeLeft}s
+                  </div>
+                </div>
+
+                <div className="rounded-xl border-2 border-yellow-100 bg-yellow-50 px-2 py-1 text-center">
+                  <div className="text-[9px] sm:text-[10px] font-black uppercase text-yellow-500 tracking-tighter">Coins</div>
+                  <div className="text-lg sm:text-xl xl:text-2xl font-black text-yellow-600">💰{score}</div>
+                </div>
+
+                <div className="rounded-xl border-2 border-emerald-100 bg-emerald-50 px-2 py-1 text-center">
+                  <div className="text-[9px] sm:text-[10px] font-black uppercase text-emerald-500 tracking-tighter">Accuracy</div>
+                  <div className="text-lg sm:text-xl xl:text-2xl font-black text-emerald-600">{getAccuracy()}%</div>
+                </div>
+              </div>
             </div>
 
-            {/* Character Guide Bubble */}
             <AnimatePresence>
               {characterMood !== 'neutral' && (
-                <motion.div 
-                  initial={{ opacity: 0, scale: 0.8 }}
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.8 }}
-                  className={`col-span-2 mt-1 lg:mt-2 flex flex-col lg:flex-row items-center gap-2 lg:gap-4 p-3 lg:p-4 rounded-2xl border-2 shadow-sm ${
-                    characterMood === 'happy' ? 'bg-orange-100 border-orange-200' : 'bg-amber-100 border-amber-200'
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  className={`self-center px-3 py-1 rounded-full border-2 text-xs sm:text-sm font-bold ${
+                    characterMood === 'happy' ? 'bg-orange-100 border-orange-200 text-orange-800' : 'bg-amber-100 border-amber-200 text-amber-800'
                   }`}
                 >
-                  <p className={`text-sm font-bold leading-tight ${characterMood === 'happy' ? 'text-orange-800' : 'text-amber-800'}`}>
-                    {characterMood === 'happy' ? '"You\'re doing great! Keep going!"' : '"Oops! Try again!"'}
-                  </p>
+                  {characterMood === 'happy' ? 'You are doing great. Keep going!' : 'Oops. Try again!'}
                 </motion.div>
               )}
             </AnimatePresence>
-          </aside>
 
-          {/* Main Typing Area */}
-          <section className="col-span-1 lg:col-span-9 bg-white min-h-[240px] sm:min-h-[270px] lg:min-h-[400px] rounded-[24px] lg:rounded-[40px] border-4 border-slate-100 shadow-xl flex flex-col overflow-hidden relative">
-            <div className="h-2.5 lg:h-4 bg-indigo-500 w-2/3"></div>
-            
-            {floatingEgg && (
-              <button
-                key={floatingEgg.id}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  inputRef.current?.focus();
-                  setScore(s => s + 50);
-                  setFloatingEgg(null);
-                  confetti({
-                    particleCount: 50,
-                    spread: 60,
-                    origin: { x: floatingEgg.x / 100, y: floatingEgg.y / 100 },
-                    colors: ['#FFD700', '#FFA500']
-                  });
-                }}
-                className="absolute z-50 text-5xl hover:scale-125 transition-transform animate-bounce cursor-pointer"
-                style={{ left: `${floatingEgg.x}%`, top: `${floatingEgg.y}%` }}
-              >
-                {floatingEgg.emoji}
-              </button>
-            )}
-
-            <div className="p-3 sm:p-4 lg:p-12 flex-1 flex flex-col justify-center items-center relative z-10">
-              
-              {/* Word Display */}
+            <div className="bg-slate-50/70 rounded-[18px] xl:rounded-[32px] border-2 border-slate-100 min-h-[175px] sm:min-h-[205px] xl:min-h-[360px] flex flex-col justify-center items-center p-3 sm:p-4 xl:p-10 relative z-10">
               <div className="flex flex-col items-center justify-center w-full">
                 {isSame ? (
-                  <div className="flex flex-wrap items-center justify-center gap-1.5 lg:gap-4 mb-3 lg:mb-8" style={{ minHeight: '56px' }}>
+                  <div className="flex flex-wrap items-center justify-center gap-1.5 xl:gap-4 mb-3 xl:mb-8" style={{ minHeight: '50px' }}>
                     {characters.map((item, idx) => {
-                      let colorClasses = "text-slate-300"; // pending
+                      let colorClasses = "text-slate-300";
                       if (item.state === 'correct') colorClasses = "text-indigo-600 border-b-4 border-indigo-200 mt-[4px]";
                       if (item.state === 'wrong') colorClasses = "text-slate-800 bg-amber-100 border-b-4 border-amber-400 mt-[4px] px-2 rounded-t-lg";
 
                       return (
-                         <span 
-                           key={idx} 
-                           className={`text-3xl sm:text-4xl lg:text-7xl font-mono lg:font-sans font-medium transition-all duration-150 inline-block leading-none ${colorClasses}`}
+                         <span
+                           key={idx}
+                           className={`text-3xl sm:text-4xl xl:text-7xl font-mono xl:font-sans font-medium transition-all duration-150 inline-block leading-none ${colorClasses}`}
                          >
                            {item.char}
                          </span>
@@ -2626,12 +2611,12 @@ export default function App() {
                     })}
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center mb-3 lg:mb-8 gap-2 lg:gap-4">
-                    <div className="text-3xl sm:text-4xl lg:text-8xl font-black text-slate-800 text-center tracking-tight">
+                  <div className="flex flex-col items-center mb-3 xl:mb-8 gap-2 xl:gap-4">
+                    <div className="text-4xl sm:text-5xl xl:text-8xl font-black text-slate-800 text-center tracking-tight">
                       {prompt}
                     </div>
                     {hint && (
-                      <div className="bg-amber-100 text-amber-800 px-4 lg:px-6 py-1.5 lg:py-2 rounded-full font-bold uppercase tracking-wider text-xs lg:text-sm border-2 border-amber-200">
+                      <div className="bg-amber-100 text-amber-800 px-4 xl:px-6 py-1.5 xl:py-2 rounded-full font-bold uppercase tracking-wider text-xs xl:text-sm border-2 border-amber-200">
                         💡 Hint: {hint}
                       </div>
                     )}
@@ -2639,20 +2624,20 @@ export default function App() {
                 )}
               </div>
 
-              <div className="w-full max-w-sm relative mt-2 lg:mt-4">
+              <div className="w-full max-w-sm sm:max-w-md relative mt-1 xl:mt-4">
                 <input
                   ref={inputRef}
                   type="text"
                   value={currentInput}
                   onChange={handleInputChange}
-                  className={`w-full text-center text-xl sm:text-2xl lg:text-4xl py-2.5 lg:py-4 px-4 lg:px-6 rounded-2xl font-bold border-4 focus:outline-none transition-colors duration-200 ${
+                  className={`w-full text-center text-xl sm:text-2xl xl:text-4xl py-2.5 xl:py-4 px-4 xl:px-6 rounded-2xl font-bold border-4 focus:outline-none transition-colors duration-200 ${
                     isMatchCorrectSoFar || currentInput === ''
-                      ? 'bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-400' 
+                      ? 'bg-white border-slate-200 text-slate-800 focus:border-indigo-400'
                       : 'bg-rose-50 border-rose-300 text-rose-900 focus:border-rose-500 animate-shake'
                   }`}
                   placeholder="Type..."
                   autoFocus
-                  autoCorrect="off" 
+                  autoCorrect="off"
                   autoCapitalize="off"
                   spellCheck="false"
                   autoComplete="off"
@@ -2662,21 +2647,20 @@ export default function App() {
               </div>
 
               {!isSame && (
-                <button 
+                <button
                   onClick={() => {
                     setCurrentInput('');
                     handleNextWord();
                     inputRef.current?.focus();
                   }}
-                  className="mt-3 lg:mt-8 text-slate-400 hover:text-rose-500 font-bold uppercase tracking-widest text-xs lg:text-sm flex items-center gap-2 transition-colors"
+                  className="mt-3 xl:mt-8 text-slate-400 hover:text-rose-500 font-bold uppercase tracking-widest text-xs xl:text-sm flex items-center gap-2 transition-colors"
                 >
                   <RotateCcw size={16} /> Pass (Skip)
                 </button>
               )}
-
             </div>
-          </section>
-        </main>
+          </div>
+        </section>
       </div>
     );
   };
@@ -2740,7 +2724,7 @@ export default function App() {
   }
 
   return (
-    <div className={`min-h-[100dvh] ${currentBgClass} text-slate-800 font-sans ${gameState === 'PLAYING' ? 'p-1.5 sm:p-3 lg:p-8' : 'p-4 md:p-8'} flex ${gameState === 'PLAYING' ? 'items-start' : 'items-center'} justify-center transition-colors duration-500`}>
+    <div className={`min-h-[100dvh] ${currentBgClass} text-slate-800 font-sans ${gameState === 'PLAYING' ? 'p-1 sm:p-2 xl:p-8' : 'p-4 md:p-8'} flex ${gameState === 'PLAYING' ? 'items-start' : 'items-center'} justify-center transition-colors duration-500`}>
       <AnimatePresence mode="wait">
         {gameState === 'LOBBY' && <motion.div key="lobby" className="w-full">{renderLobby()}</motion.div>}
         {gameState === 'COUNTDOWN' && <motion.div key="countdown" className="w-full flex justify-center items-center">{renderCountdown()}</motion.div>}
