@@ -62,7 +62,8 @@ const MATH_LIST_HARD = mapToGameItem([
   "triangle", "rectangle", "cylinder", "perimeter", "volume", "diameter", "radius", "equation"
 ]);
 
-const TIME_LIMIT = 60; // 60 seconds
+const TIME_LIMIT = 45; // 45 seconds
+const COINS_PER_CORRECT_ANSWER = 5;
 const LIVE_CHAT_REFRESH_MS = 2500;
 const USERS_STORAGE_KEY = 'typingAdventureUsers';
 const CURRENT_USER_STORAGE_KEY = 'typingAdventureCurrentUser';
@@ -1158,7 +1159,7 @@ export default function App() {
     // Check if word is complete
     if (value.trim() === currentWord) {
       // Correct!
-      setScore(prev => prev + 10);
+      setScore(prev => prev + COINS_PER_CORRECT_ANSWER);
       confetti({
         particleCount: 30,
         spread: 40,
