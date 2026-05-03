@@ -2222,6 +2222,38 @@ export default function App() {
           </div>
         </div>
 
+        <section className="w-full max-w-md bg-slate-50 p-6 rounded-3xl border-4 border-slate-100 flex flex-col min-h-[260px] max-h-[420px] mb-8">
+          <h2 className="text-2xl font-black text-slate-800 mb-6 uppercase tracking-tight flex items-center justify-center gap-2 shrink-0">
+            <Trophy className="text-amber-500" /> Top Earners
+          </h2>
+          {topUsers.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 font-medium text-center">
+              <div className="text-4xl mb-4 opacity-50">🌟</div>
+              <p>No earners yet.<br/>Be the first!</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-4 overflow-y-auto pr-1 pb-4">
+              {topUsers.map((entry, i) => {
+                const stats = entry.modeStats[gameMode];
+                return (
+                  <button
+                    key={entry.username}
+                    onClick={() => handleOpenProfile(entry.username)}
+                    className="bg-white p-4 rounded-2xl shadow-sm border-2 border-slate-100 flex items-center gap-3 text-left hover:border-amber-200 hover:scale-[1.01] transition-all"
+                  >
+                    <div className="text-2xl">{entry.avatar}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-bold text-slate-800 truncate">{i + 1}. {entry.username}</div>
+                      <div className="text-xs text-slate-400 font-bold uppercase tracking-wider truncate">{entry.displayName || entry.username} · {stats?.bestAccuracy || 0}% acc</div>
+                    </div>
+                    <div className="font-black text-yellow-600 text-xl flex items-center gap-1">💰{stats?.bestScore || 0}</div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
         <div className="w-full max-w-md bg-white p-6 rounded-3xl border-b-8 border-r-8 border-sky-100 shadow-sm mb-8">
           <label className="block text-2xl font-black uppercase tracking-tighter text-sky-400 mb-4">
             How old are you?
@@ -2370,40 +2402,8 @@ export default function App() {
         </button>
       </div>
 
-      {/* Right Column: Leaderboard and Chat */}
+      {/* Right Column: Chat */}
       <div className="w-full md:w-80 flex flex-col gap-4 md:self-stretch shrink-0">
-        <section className="bg-slate-50 p-6 rounded-3xl border-4 border-slate-100 flex flex-col min-h-[320px] md:max-h-[430px]">
-          <h2 className="text-2xl font-black text-slate-800 mb-6 uppercase tracking-tight flex items-center justify-center gap-2 shrink-0">
-            <Trophy className="text-amber-500" /> Top Earners
-          </h2>
-          {topUsers.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-slate-400 font-medium text-center">
-              <div className="text-4xl mb-4 opacity-50">🌟</div>
-              <p>No earners yet.<br/>Be the first!</p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-4 overflow-y-auto pr-1 pb-4">
-              {topUsers.map((entry, i) => {
-                const stats = entry.modeStats[gameMode];
-                return (
-                <button
-                  key={entry.username}
-                  onClick={() => handleOpenProfile(entry.username)}
-                  className="bg-white p-4 rounded-2xl shadow-sm border-2 border-slate-100 flex items-center gap-3 text-left hover:border-amber-200 hover:scale-[1.01] transition-all"
-                >
-                   <div className="text-2xl">{entry.avatar}</div>
-                   <div className="flex-1 min-w-0">
-                     <div className="font-bold text-slate-800 truncate">{i + 1}. {entry.username}</div>
-                     <div className="text-xs text-slate-400 font-bold uppercase tracking-wider truncate">{entry.displayName || entry.username} · {stats?.bestAccuracy || 0}% acc</div>
-                   </div>
-                   <div className="font-black text-yellow-600 text-xl flex items-center gap-1">💰{stats?.bestScore || 0}</div>
-                </button>
-                );
-              })}
-            </div>
-          )}
-        </section>
-
         <section className="bg-white p-4 rounded-3xl border-4 border-slate-100 flex flex-col min-h-[320px]">
           <div className="flex items-center justify-between gap-2 mb-3">
             <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
