@@ -231,7 +231,8 @@ begin
   where thread_id = v_thread_id;
 
   if v_member_count < 2 then
-    delete from public.chat_threads where id = v_thread_id;
+    delete from public.chat_threads
+    where public.chat_threads.id = v_thread_id;
     raise exception 'Pick at least one other player';
   end if;
 
@@ -341,7 +342,7 @@ begin
 
   update public.chat_threads
   set updated_at = now()
-  where id = p_thread_id;
+  where public.chat_threads.id = p_thread_id;
 
   return query
   select * from public.list_chat_messages(p_session_token, p_thread_id, 50);
