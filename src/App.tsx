@@ -2404,7 +2404,7 @@ export default function App() {
 
       {/* Right Column: Chat */}
       <div className="w-full md:w-80 flex flex-col gap-4 md:self-stretch shrink-0">
-        <section className="bg-white p-4 rounded-3xl border-4 border-slate-100 flex flex-col min-h-[320px]">
+        <section className="bg-white p-4 rounded-3xl border-4 border-slate-100 flex flex-col min-h-[520px] md:min-h-[680px]">
           <div className="flex items-center justify-between gap-2 mb-3">
             <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
               <MessageCircle className="text-indigo-500" size={22} /> Chat
@@ -2420,7 +2420,7 @@ export default function App() {
             </button>
           </div>
 
-          <div className="flex-1 min-h-0 max-h-56 overflow-y-auto space-y-3 pr-1">
+          <div className="flex-1 min-h-[360px] overflow-y-auto space-y-3 pr-1">
             {publicChatMessages.length === 0 ? (
               <div className="h-full flex items-center justify-center text-center text-slate-400 font-bold">
                 No comments yet.
