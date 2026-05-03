@@ -2,65 +2,34 @@ import React, { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import { motion, AnimatePresence } from 'motion/react';
 import { Play, RotateCcw, Trophy, Timer, Target, Star, Volume2, ArrowLeft, ShoppingBag, X, Gift, User, Lock, LogOut, BarChart3, MessageCircle, Send, Users, Plus } from 'lucide-react';
-import { EQUATIONS_LIST, FLIPPER_LIST, EMOJI_LIST, SCRAMBLE_LIST, OPPOSITES_LIST, GameItem } from './data';
+import {
+  EQUATIONS_LIST_EASY,
+  EQUATIONS_LIST_MEDIUM,
+  EQUATIONS_LIST_HARD,
+  FLIPPER_LIST_EASY,
+  FLIPPER_LIST_MEDIUM,
+  FLIPPER_LIST_HARD,
+  EMOJI_LIST_EASY,
+  EMOJI_LIST_MEDIUM,
+  EMOJI_LIST_HARD,
+  SCRAMBLE_LIST_EASY,
+  SCRAMBLE_LIST_MEDIUM,
+  SCRAMBLE_LIST_HARD,
+  OPPOSITES_LIST_EASY,
+  OPPOSITES_LIST_MEDIUM,
+  OPPOSITES_LIST_HARD,
+  WORD_LIST_EASY,
+  WORD_LIST_MEDIUM,
+  WORD_LIST_HARD,
+  NUMBER_LIST_EASY,
+  NUMBER_LIST_MEDIUM,
+  NUMBER_LIST_HARD,
+  MATH_LIST_EASY,
+  MATH_LIST_MEDIUM,
+  MATH_LIST_HARD,
+  type GameItem
+} from './data';
 import { DEFAULT_AVATARS, DEFAULT_BACKGROUNDS, SECRET_BACKGROUNDS, SHOP_AVATARS, SHOP_BACKGROUNDS } from './shopData';
-
-const mapToGameItem = (list: string[]): GameItem[] => list.map(word => ({ prompt: word, answer: word }));
-
-const WORD_LIST_EASY = mapToGameItem([
-  "cat", "dog", "pig", "cow", "rat", "sun", "moon", "star", "bug", "ant",
-  "bat", "car", "bus", "hat", "cap", "red", "blue", "run", "jump", "play",
-  "toy", "boy", "girl", "mom", "dad", "tree", "bird", "fish", "frog", "bear",
-  "bee", "fly", "fox", "owl", "man", "map", "box", "cup", "bed", "day",
-  "one", "two", "six", "ten", "yes", "no", "hi", "bye", "up", "out"
-]);
-
-const WORD_LIST_MEDIUM = mapToGameItem([
-  "apple", "bread", "house", "mouse", "train", "plant", "water", "earth", "world", "light",
-  "happy", "smile", "laugh", "green", "black", "white", "brown", "color", "paint", "paper",
-  "school", "friend", "family", "sister", "brother", "mother", "father", "animal", "monkey", "tiger",
-  "lion", "zebra", "snake", "ocean", "river", "beach", "grass", "cloud", "storm", "magic",
-  "music", "dance", "song", "story", "book", "pencil", "clock", "watch", "shoe", "shirt"
-]);
-
-const WORD_LIST_HARD = mapToGameItem([
-  "elephant", "giraffe", "dinosaur", "computer", "keyboard", "internet", "website", "champion", "adventure", "treasure",
-  "mountain", "volcano", "astronaut", "spaceship", "universe", "galaxy", "scientist", "experiment", "telescope", "microscope",
-  "butterfly", "crocodile", "alligator", "kangaroo", "penguin", "dolphin", "whale", "octopus", "jellyfish", "seahorse",
-  "beautiful", "wonderful", "amazing", "fantastic", "brilliant", "excellent", "awesome", "perfect", "magical", "colorful",
-  "important", "together", "different", "remember", "understand", "question", "answer", "learning", "discovery", "knowledge"
-]);
-
-const NUMBER_LIST_EASY = mapToGameItem([
-  "1", "2", "3", "4", "5", "6", "7", "8", "9", "10",
-  "11", "12", "15", "20", "25", "30", "40", "50", "99"
-]);
-
-const NUMBER_LIST_MEDIUM = mapToGameItem([
-  "100", "200", "300", "400", "500", "150", "250", "350", "450", "550",
-  "123", "456", "789", "987", "654", "321", "111", "222", "333", "444",
-  "105", "206", "307", "408", "509", "999", "888", "777", "666", "555"
-]);
-
-const NUMBER_LIST_HARD = mapToGameItem([
-  "1000", "2000", "3000", "1234", "5678", "3456", "7890", "9999", "8888", "2500",
-  "1999", "2023", "2024", "2025", "7777", "6666", "5555", "4444", "2020", "5050"
-]);
-
-const MATH_LIST_EASY = mapToGameItem([
-  "1/2", "1/4", "3/4", "0.5", "0.1", "1.5", "2.0", "line", "dot", "ray",
-  "cube", "cone", "area", "math", "add", "sum", "box", "half"
-]);
-
-const MATH_LIST_MEDIUM = mapToGameItem([
-  "1/3", "2/5", "3/8", "0.25", "0.75", "1.25", "3.14", "angle", "circle", "square",
-  "vertex", "side", "base", "prism", "shape", "equal", "minus"
-]);
-
-const MATH_LIST_HARD = mapToGameItem([
-  "3.1415", "5/16", "7/8", "0.333", "decimal", "fraction", "geometry", "polygon",
-  "triangle", "rectangle", "cylinder", "perimeter", "volume", "diameter", "radius", "equation"
-]);
 
 const TIME_LIMIT = 45; // 45 seconds
 const COINS_PER_CORRECT_ANSWER = 5;
@@ -78,6 +47,51 @@ type GameState = 'LOBBY' | 'COUNTDOWN' | 'PLAYING' | 'GAMEOVER';
 type Difficulty = 'easy' | 'medium' | 'hard';
 type GameMode = 'words' | 'numbers' | 'math' | 'equations' | 'flipper' | 'emoji' | 'scramble' | 'opposites';
 type AuthMode = 'login' | 'create';
+
+const GAME_LISTS: Record<GameMode, Record<Difficulty, GameItem[]>> = {
+  words: {
+    easy: WORD_LIST_EASY,
+    medium: WORD_LIST_MEDIUM,
+    hard: WORD_LIST_HARD
+  },
+  numbers: {
+    easy: NUMBER_LIST_EASY,
+    medium: NUMBER_LIST_MEDIUM,
+    hard: NUMBER_LIST_HARD
+  },
+  math: {
+    easy: MATH_LIST_EASY,
+    medium: MATH_LIST_MEDIUM,
+    hard: MATH_LIST_HARD
+  },
+  equations: {
+    easy: EQUATIONS_LIST_EASY,
+    medium: EQUATIONS_LIST_MEDIUM,
+    hard: EQUATIONS_LIST_HARD
+  },
+  flipper: {
+    easy: FLIPPER_LIST_EASY,
+    medium: FLIPPER_LIST_MEDIUM,
+    hard: FLIPPER_LIST_HARD
+  },
+  emoji: {
+    easy: EMOJI_LIST_EASY,
+    medium: EMOJI_LIST_MEDIUM,
+    hard: EMOJI_LIST_HARD
+  },
+  scramble: {
+    easy: SCRAMBLE_LIST_EASY,
+    medium: SCRAMBLE_LIST_MEDIUM,
+    hard: SCRAMBLE_LIST_HARD
+  },
+  opposites: {
+    easy: OPPOSITES_LIST_EASY,
+    medium: OPPOSITES_LIST_MEDIUM,
+    hard: OPPOSITES_LIST_HARD
+  }
+};
+
+const getGameList = (mode: GameMode, level: Difficulty) => GAME_LISTS[mode][level];
 
 interface ModeStats {
   gamesPlayed: number;
@@ -1026,32 +1040,7 @@ export default function App() {
   });
 
   const startCountdown = () => {
-    let list: GameItem[];
-    if (gameMode === 'words') {
-      if (difficulty === 'easy') list = WORD_LIST_EASY;
-      else if (difficulty === 'medium') list = WORD_LIST_MEDIUM;
-      else list = WORD_LIST_HARD;
-    } else if (gameMode === 'numbers') {
-      if (difficulty === 'easy') list = NUMBER_LIST_EASY;
-      else if (difficulty === 'medium') list = NUMBER_LIST_MEDIUM;
-      else list = NUMBER_LIST_HARD;
-    } else if (gameMode === 'math') {
-      if (difficulty === 'easy') list = MATH_LIST_EASY;
-      else if (difficulty === 'medium') list = MATH_LIST_MEDIUM;
-      else list = MATH_LIST_HARD;
-    } else if (gameMode === 'equations') {
-      list = EQUATIONS_LIST;
-    } else if (gameMode === 'flipper') {
-      list = FLIPPER_LIST;
-    } else if (gameMode === 'emoji') {
-       list = EMOJI_LIST;
-    } else if (gameMode === 'scramble') {
-       list = SCRAMBLE_LIST;
-    } else if (gameMode === 'opposites') {
-       list = OPPOSITES_LIST;
-    } else {
-       list = WORD_LIST_EASY;
-    }
+    const list = getGameList(gameMode, difficulty);
 
     const shuffled = [...list].sort(() => 0.5 - Math.random());
     setWords(shuffled);
@@ -1206,32 +1195,7 @@ export default function App() {
       setCurrentWordIndex(prev => prev + 1);
     } else {
       // Ran out of words (rare)
-      let list: GameItem[];
-      if (gameMode === 'words') {
-        if (difficulty === 'easy') list = WORD_LIST_EASY;
-        else if (difficulty === 'medium') list = WORD_LIST_MEDIUM;
-        else list = WORD_LIST_HARD;
-      } else if (gameMode === 'numbers') {
-        if (difficulty === 'easy') list = NUMBER_LIST_EASY;
-        else if (difficulty === 'medium') list = NUMBER_LIST_MEDIUM;
-        else list = NUMBER_LIST_HARD;
-      } else if (gameMode === 'math') {
-        if (difficulty === 'easy') list = MATH_LIST_EASY;
-        else if (difficulty === 'medium') list = MATH_LIST_MEDIUM;
-        else list = MATH_LIST_HARD;
-      } else if (gameMode === 'equations') {
-        list = EQUATIONS_LIST;
-      } else if (gameMode === 'flipper') {
-        list = FLIPPER_LIST;
-      } else if (gameMode === 'emoji') {
-         list = EMOJI_LIST;
-      } else if (gameMode === 'scramble') {
-         list = SCRAMBLE_LIST;
-      } else if (gameMode === 'opposites') {
-         list = OPPOSITES_LIST;
-      } else {
-         list = WORD_LIST_EASY;
-      }
+      const list = getGameList(gameMode, difficulty);
 
       const shuffled = [...list].sort(() => 0.5 - Math.random());
       setWords(shuffled);
