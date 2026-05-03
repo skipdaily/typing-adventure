@@ -362,6 +362,8 @@ export default function App() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [newChatMembers, setNewChatMembers] = useState<string[]>([]);
   const [newChatTitle, setNewChatTitle] = useState('');
+  const [showAddMemberPicker, setShowAddMemberPicker] = useState(false);
+  const [addChatMemberUsername, setAddChatMemberUsername] = useState('');
   const [chatText, setChatText] = useState('');
   const [chatError, setChatError] = useState('');
   
@@ -589,6 +591,32 @@ export default function App() {
     }
   };
 
+  const handleAddMemberToChat = async () => {
+    if (!SUPABASE_ENABLED || !currentUser?.sessionToken || !selectedChatThreadId) {
+      setChatError('Choose a chat first.');
+      return;
+    }
+
+    if (!addChatMemberUsername) {
+      setChatError('Choose a player to add.');
+      return;
+    }
+
+    try {
+      await supabaseRpc<string>('add_chat_member', {
+        p_session_token: currentUser.sessionToken,
+        p_thread_id: selectedChatThreadId,
+        p_username: addChatMemberUsername
+      });
+      setAddChatMemberUsername('');
+      setShowAddMemberPicker(false);
+      setChatError('');
+      await loadChatThreads(selectedChatThreadId);
+    } catch (error) {
+      setChatError(error instanceof Error ? error.message : 'Could not add player.');
+    }
+  };
+
   const handleSendChatMessage = async () => {
     const message = chatText.trim();
 
@@ -723,6 +751,8 @@ export default function App() {
     setChatMessages([]);
     setNewChatMembers([]);
     setNewChatTitle('');
+    setShowAddMemberPicker(false);
+    setAddChatMemberUsername('');
     setChatText('');
     setChatError('');
   };
@@ -1436,6 +1466,9 @@ export default function App() {
     const isCurrentUserDashboard = currentUser?.username === profile.username;
     const selectedChatThread = chatThreads.find(thread => thread.id === selectedChatThreadId);
     const availableChatPlayers = chatPlayers.filter(player => !newChatMembers.includes(player.username));
+    const availableSelectedChatPlayers = selectedChatThread
+      ? chatPlayers.filter(player => !selectedChatThread.memberUsernames.some(username => normalizeUsername(username) === normalizeUsername(player.username)))
+      : [];
     const getChatThreadTitle = (thread: ChatThread) => {
       if (thread.title) return thread.title;
       const otherNames = thread.memberNames.filter((_, index) => thread.memberUsernames[index] !== currentUser?.username);
@@ -1621,13 +1654,54 @@ export default function App() {
                     <>
                       <div className="border-b-4 border-slate-100 pb-3 mb-3">
                         <div className="font-black text-slate-800 text-xl truncate">{getChatThreadTitle(selectedChatThread)}</div>
-                        <div className="flex flex-wrap gap-2 mt-2">
+                        <div className="flex flex-wrap gap-2 mt-2 items-center">
                           {selectedChatThread.memberNames.map((name, index) => (
                             <span key={`${selectedChatThread.id}-${selectedChatThread.memberUsernames[index]}`} className="text-xs font-black bg-slate-50 text-slate-500 border-2 border-slate-100 rounded-full px-2 py-1">
                               {selectedChatThread.memberAvatars[index]} {name}
                             </span>
                           ))}
+                          <button
+                            onClick={() => {
+                              setShowAddMemberPicker(prev => !prev);
+                              setAddChatMemberUsername('');
+                              setChatError('');
+                            }}
+                            className="w-7 h-7 rounded-full bg-indigo-50 text-indigo-600 border-2 border-indigo-100 flex items-center justify-center hover:bg-indigo-100 transition-all"
+                            aria-label="Add player to chat"
+                          >
+                            <Plus size={16} />
+                          </button>
                         </div>
+                        {showAddMemberPicker && (
+                          <div className="mt-3 flex flex-col sm:flex-row gap-2">
+                            <select
+                              value={addChatMemberUsername}
+                              onChange={(e) => {
+                                setAddChatMemberUsername(e.target.value);
+                                setChatError('');
+                              }}
+                              className="flex-1 min-w-0 bg-slate-50 border-4 border-slate-100 rounded-xl px-3 py-2 font-black text-slate-700 outline-none focus:border-indigo-300"
+                            >
+                              <option value="">Add player...</option>
+                              {availableSelectedChatPlayers.map(player => (
+                                <option key={player.username} value={player.username}>
+                                  {player.displayName} (@{player.username})
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={handleAddMemberToChat}
+                              disabled={!addChatMemberUsername}
+                              className={`px-4 py-2 rounded-xl font-black border-b-4 transition-all ${
+                                addChatMemberUsername
+                                  ? 'bg-indigo-500 text-white border-indigo-700 hover:bg-indigo-400 active:border-b-0'
+                                  : 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
+                              }`}
+                            >
+                              Add
+                            </button>
+                          </div>
+                        )}
                       </div>
 
                       <div className="flex-1 min-h-0 max-h-72 overflow-y-auto space-y-3 pr-1">
