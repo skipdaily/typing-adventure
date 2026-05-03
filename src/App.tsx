@@ -2510,30 +2510,31 @@ export default function App() {
     const isMatchCorrectSoFar = answerStr.startsWith(currentInput);
 
     return (
-      <div className="w-full max-w-6xl mx-auto flex flex-col gap-8 min-h-[768px]" onClick={() => inputRef.current?.focus()}>
+      <div className="w-full max-w-6xl mx-auto flex flex-col gap-3 md:gap-8 min-h-[calc(100dvh-1.5rem)] md:min-h-[720px] pb-4" onClick={() => inputRef.current?.focus()}>
         {/* Header Bar */}
-        <header className="grid grid-cols-2 md:grid-cols-3 items-center bg-white rounded-2xl p-6 shadow-sm border-2 border-slate-100">
-          <div className="flex items-center gap-4">
+        <header className="sticky top-2 z-40 bg-white rounded-2xl p-2 md:p-6 shadow-sm border-2 border-slate-100">
+          <div className="flex items-center justify-between gap-2 md:grid md:grid-cols-3">
+          <div className="flex items-center gap-2 md:gap-4 min-w-0">
             <button 
               onClick={() => setGameState('LOBBY')}
-              className="w-12 h-12 rounded-xl bg-slate-100 border-2 border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors shrink-0"
+              className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-slate-100 border-2 border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors shrink-0"
               title="Back to Menu"
             >
-              <ArrowLeft size={24} strokeWidth={3} />
+              <ArrowLeft className="w-5 h-5 md:w-6 md:h-6" strokeWidth={3} />
             </button>
-            <div className="w-12 h-12 bg-orange-400 rounded-full flex items-center justify-center text-white text-2xl font-bold border-b-4 border-orange-600 shrink-0">
+            <div className="w-10 h-10 md:w-12 md:h-12 bg-orange-400 rounded-full flex items-center justify-center text-white text-xl md:text-2xl font-bold border-b-4 border-orange-600 shrink-0">
               {avatar}
             </div>
             <div className="min-w-0">
-              <p className="text-xs uppercase tracking-widest font-bold text-slate-400">Player</p>
-              <h2 className="text-xl font-black text-slate-800 truncate">{playerName || 'Super Typer'}</h2>
+              <p className="hidden sm:block text-xs uppercase tracking-widest font-bold text-slate-400">Player</p>
+              <h2 className="max-w-[7rem] sm:max-w-none text-base md:text-xl font-black text-slate-800 truncate">{playerName || 'Super Typer'}</h2>
             </div>
           </div>
 
-          <div className="flex flex-col items-center col-span-2 md:col-span-1 mt-4 md:mt-0 order-last md:order-none">
-            <div className="bg-rose-50 px-6 py-2 rounded-full border-2 border-rose-200 flex items-center gap-3">
-              <Timer className="w-6 h-6 text-rose-500" />
-              <span className={`text-2xl font-black font-mono tracking-tighter ${timeLeft <= 10 ? 'text-rose-600 animate-pulse' : 'text-rose-600'}`}>{timeLeft}s</span>
+          <div className="flex flex-col items-center md:col-span-1">
+            <div className="bg-rose-50 px-3 md:px-6 py-2 rounded-full border-2 border-rose-200 flex items-center gap-2 md:gap-3">
+              <Timer className="w-5 h-5 md:w-6 md:h-6 text-rose-500" />
+              <span className={`text-xl md:text-2xl font-black font-mono tracking-tighter ${timeLeft <= 10 ? 'text-rose-600 animate-pulse' : 'text-rose-600'}`}>{timeLeft}s</span>
             </div>
           </div>
           
@@ -2542,19 +2543,20 @@ export default function App() {
             <div className="w-8 h-8 rounded-lg bg-sky-200 border border-sky-300"></div>
             <div className="w-8 h-8 rounded-lg bg-sky-300 border border-sky-400"></div>
           </div>
+          </div>
         </header>
 
-        <main className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
+        <main className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-3 md:gap-8 items-start">
           {/* Sidebar Stats */}
-          <aside className="md:col-span-3 flex flex-row md:flex-col gap-4 overflow-x-auto md:overflow-visible">
-            <div className="bg-white p-6 rounded-3xl border-b-8 border-r-8 border-yellow-100 shadow-sm min-w-[140px] flex-1 md:flex-none">
-              <p className="text-xs font-black uppercase text-yellow-500 mb-1 tracking-tighter">Coins Earned</p>
-              <p className="text-4xl md:text-5xl font-black text-yellow-600 flex items-center gap-1">💰{score}</p>
+          <aside className="sticky top-[4.75rem] md:top-[7rem] z-30 md:col-span-3 grid grid-cols-2 md:flex md:flex-col gap-3 md:gap-4">
+            <div className="bg-white p-3 md:p-6 rounded-2xl md:rounded-3xl border-b-4 md:border-b-8 border-r-4 md:border-r-8 border-yellow-100 shadow-sm min-w-0">
+              <p className="text-[10px] md:text-xs font-black uppercase text-yellow-500 mb-1 tracking-tighter">Coins Earned</p>
+              <p className="text-2xl md:text-5xl font-black text-yellow-600 flex items-center gap-1">💰{score}</p>
             </div>
             
-            <div className="bg-white p-6 rounded-3xl border-b-8 border-r-8 border-emerald-100 shadow-sm min-w-[140px] flex-1 md:flex-none">
-              <p className="text-xs font-black uppercase text-emerald-400 mb-1 tracking-tighter">Accuracy</p>
-              <p className="text-4xl md:text-5xl font-black text-emerald-600">{getAccuracy()}<span className="text-2xl">%</span></p>
+            <div className="bg-white p-3 md:p-6 rounded-2xl md:rounded-3xl border-b-4 md:border-b-8 border-r-4 md:border-r-8 border-emerald-100 shadow-sm min-w-0">
+              <p className="text-[10px] md:text-xs font-black uppercase text-emerald-400 mb-1 tracking-tighter">Accuracy</p>
+              <p className="text-2xl md:text-5xl font-black text-emerald-600">{getAccuracy()}<span className="text-base md:text-2xl">%</span></p>
             </div>
 
             {/* Character Guide Bubble */}
@@ -2577,8 +2579,8 @@ export default function App() {
           </aside>
 
           {/* Main Typing Area */}
-          <section className="col-span-1 md:col-span-9 bg-white min-h-[400px] rounded-[40px] border-4 border-slate-100 shadow-xl flex flex-col overflow-hidden relative">
-            <div className="h-4 bg-indigo-500 w-2/3"></div>
+          <section className="col-span-1 md:col-span-9 bg-white min-h-[300px] md:min-h-[400px] rounded-[28px] md:rounded-[40px] border-4 border-slate-100 shadow-xl flex flex-col overflow-hidden relative">
+            <div className="h-3 md:h-4 bg-indigo-500 w-2/3"></div>
             
             {floatingEgg && (
               <button
@@ -2602,12 +2604,12 @@ export default function App() {
               </button>
             )}
 
-            <div className="p-8 md:p-12 flex-1 flex flex-col justify-center items-center relative z-10">
+            <div className="p-4 md:p-12 flex-1 flex flex-col justify-center items-center relative z-10">
               
               {/* Word Display */}
               <div className="flex flex-col items-center justify-center w-full">
                 {isSame ? (
-                  <div className="flex flex-wrap items-center justify-center gap-2 md:gap-4 mb-8" style={{ minHeight: '100px' }}>
+                  <div className="flex flex-wrap items-center justify-center gap-2 md:gap-4 mb-4 md:mb-8" style={{ minHeight: '72px' }}>
                     {characters.map((item, idx) => {
                       let colorClasses = "text-slate-300"; // pending
                       if (item.state === 'correct') colorClasses = "text-indigo-600 border-b-4 border-indigo-200 mt-[4px]";
@@ -2616,7 +2618,7 @@ export default function App() {
                       return (
                          <span 
                            key={idx} 
-                           className={`text-6xl md:text-7xl font-mono md:font-sans font-medium transition-all duration-150 inline-block leading-none ${colorClasses}`}
+                           className={`text-4xl sm:text-5xl md:text-7xl font-mono md:font-sans font-medium transition-all duration-150 inline-block leading-none ${colorClasses}`}
                          >
                            {item.char}
                          </span>
@@ -2624,8 +2626,8 @@ export default function App() {
                     })}
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center mb-8 gap-4">
-                    <div className="text-6xl md:text-8xl font-black text-slate-800 text-center tracking-tight">
+                  <div className="flex flex-col items-center mb-4 md:mb-8 gap-3 md:gap-4">
+                    <div className="text-4xl sm:text-5xl md:text-8xl font-black text-slate-800 text-center tracking-tight">
                       {prompt}
                     </div>
                     {hint && (
@@ -2643,7 +2645,7 @@ export default function App() {
                   type="text"
                   value={currentInput}
                   onChange={handleInputChange}
-                  className={`w-full text-center text-4xl py-4 px-6 rounded-2xl font-bold border-4 focus:outline-none transition-colors duration-200 ${
+                  className={`w-full text-center text-2xl md:text-4xl py-3 md:py-4 px-4 md:px-6 rounded-2xl font-bold border-4 focus:outline-none transition-colors duration-200 ${
                     isMatchCorrectSoFar || currentInput === ''
                       ? 'bg-slate-50 border-slate-200 text-slate-800 focus:border-indigo-400' 
                       : 'bg-rose-50 border-rose-300 text-rose-900 focus:border-rose-500 animate-shake'
@@ -2654,6 +2656,8 @@ export default function App() {
                   autoCapitalize="off"
                   spellCheck="false"
                   autoComplete="off"
+                  inputMode="text"
+                  enterKeyHint="done"
                 />
               </div>
 
@@ -2664,7 +2668,7 @@ export default function App() {
                     handleNextWord();
                     inputRef.current?.focus();
                   }}
-                  className="mt-8 text-slate-400 hover:text-rose-500 font-bold uppercase tracking-widest text-sm flex items-center gap-2 transition-colors"
+                  className="mt-4 md:mt-8 text-slate-400 hover:text-rose-500 font-bold uppercase tracking-widest text-sm flex items-center gap-2 transition-colors"
                 >
                   <RotateCcw size={16} /> Pass (Skip)
                 </button>
@@ -2729,14 +2733,14 @@ export default function App() {
 
   if (!currentUser) {
     return (
-      <div className={`min-h-screen ${currentBgClass} text-slate-800 font-sans p-4 md:p-8 flex items-center justify-center transition-colors duration-500`}>
+      <div className={`min-h-[100dvh] ${currentBgClass} text-slate-800 font-sans p-4 md:p-8 flex items-center justify-center transition-colors duration-500`}>
         {renderAuth()}
       </div>
     );
   }
 
   return (
-    <div className={`min-h-screen ${currentBgClass} text-slate-800 font-sans p-4 md:p-8 flex items-center justify-center transition-colors duration-500`}>
+    <div className={`min-h-[100dvh] ${currentBgClass} text-slate-800 font-sans p-3 sm:p-4 md:p-8 flex ${gameState === 'PLAYING' ? 'items-start' : 'items-center'} justify-center transition-colors duration-500`}>
       <AnimatePresence mode="wait">
         {gameState === 'LOBBY' && <motion.div key="lobby" className="w-full">{renderLobby()}</motion.div>}
         {gameState === 'COUNTDOWN' && <motion.div key="countdown" className="w-full flex justify-center items-center">{renderCountdown()}</motion.div>}
