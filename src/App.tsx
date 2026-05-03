@@ -261,6 +261,10 @@ const publicChatRowToMessage = (row: any): PublicChatMessage => ({
   createdAt: row.created_at || new Date().toISOString()
 });
 
+const sortPublicChatNewestFirst = (messages: PublicChatMessage[]) => (
+  [...messages].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+);
+
 const chatPlayerRowToPlayer = (row: any): ChatPlayer => ({
   username: row.username,
   displayName: row.display_name || row.username,
@@ -471,7 +475,7 @@ export default function App() {
       const rows = await supabaseRpc<any[]>('list_public_chat', {
         p_limit: 30
       });
-      setPublicChatMessages(rows.map(publicChatRowToMessage));
+      setPublicChatMessages(sortPublicChatNewestFirst(rows.map(publicChatRowToMessage)));
     } catch (error) {
       if (!silent) console.error(error);
     }
@@ -496,7 +500,7 @@ export default function App() {
         p_session_token: currentUser.sessionToken,
         p_message: message
       });
-      setPublicChatMessages(rows.map(publicChatRowToMessage));
+      setPublicChatMessages(sortPublicChatNewestFirst(rows.map(publicChatRowToMessage)));
       setPublicChatText('');
     } catch (error) {
       setPublicChatError(error instanceof Error ? error.message : 'Could not send chat.');

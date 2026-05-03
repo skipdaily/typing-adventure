@@ -860,7 +860,7 @@ as $$
     limit greatest(least(p_limit, 50), 1)
   ) recent
   join public.players p on p.id = recent.player_id
-  order by recent.created_at asc
+  order by recent.created_at desc
 $$;
 
 create or replace function public.post_public_chat(p_session_token text, p_message text)
