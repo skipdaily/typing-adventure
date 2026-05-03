@@ -2420,6 +2420,32 @@ export default function App() {
             </button>
           </div>
 
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handlePostPublicChat();
+            }}
+            className="mb-3 flex gap-2"
+          >
+            <input
+              type="text"
+              value={publicChatText}
+              onChange={(e) => {
+                setPublicChatText(e.target.value);
+                setPublicChatError('');
+              }}
+              placeholder="Add comment..."
+              className="flex-1 min-w-0 bg-slate-50 border-4 border-slate-100 rounded-xl px-3 py-2 font-bold text-slate-700 outline-none focus:border-indigo-300"
+            />
+            <button className="bg-indigo-500 text-white rounded-xl px-3 border-b-4 border-indigo-700 hover:bg-indigo-400 active:border-b-0 transition-all" aria-label="Send public chat">
+              <Send size={18} />
+            </button>
+          </form>
+
+          {publicChatError && (
+            <div className="mb-3 text-xs font-black text-rose-500">{publicChatError}</div>
+          )}
+
           <div className="flex-1 min-h-[360px] overflow-y-auto space-y-3 pr-1">
             {publicChatMessages.length === 0 ? (
               <div className="h-full flex items-center justify-center text-center text-slate-400 font-bold">
@@ -2438,32 +2464,6 @@ export default function App() {
               </div>
             ))}
           </div>
-
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handlePostPublicChat();
-            }}
-            className="mt-3 flex gap-2"
-          >
-            <input
-              type="text"
-              value={publicChatText}
-              onChange={(e) => {
-                setPublicChatText(e.target.value);
-                setPublicChatError('');
-              }}
-              placeholder="Add comment..."
-              className="flex-1 min-w-0 bg-slate-50 border-4 border-slate-100 rounded-xl px-3 py-2 font-bold text-slate-700 outline-none focus:border-indigo-300"
-            />
-            <button className="bg-indigo-500 text-white rounded-xl px-3 border-b-4 border-indigo-700 hover:bg-indigo-400 active:border-b-0 transition-all" aria-label="Send public chat">
-              <Send size={18} />
-            </button>
-          </form>
-
-          {publicChatError && (
-            <div className="mt-2 text-xs font-black text-rose-500">{publicChatError}</div>
-          )}
         </section>
       </div>
       </div>
