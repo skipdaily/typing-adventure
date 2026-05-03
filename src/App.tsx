@@ -252,7 +252,7 @@ const formatChatTime = (date?: string) => {
 };
 
 const publicChatRowToMessage = (row: any): PublicChatMessage => ({
-  id: row.id,
+  id: row.message_id || row.id,
   username: row.username,
   displayName: row.display_name || row.username,
   avatar: row.avatar || '🐶',
@@ -267,7 +267,7 @@ const chatPlayerRowToPlayer = (row: any): ChatPlayer => ({
 });
 
 const chatThreadRowToThread = (row: any): ChatThread => ({
-  id: row.id,
+  id: row.chat_thread_id || row.id,
   title: row.title || '',
   memberUsernames: row.member_usernames || [],
   memberNames: row.member_names || [],
@@ -277,8 +277,8 @@ const chatThreadRowToThread = (row: any): ChatThread => ({
 });
 
 const chatMessageRowToMessage = (row: any): ChatMessage => ({
-  id: row.id,
-  threadId: row.thread_id,
+  id: row.message_id || row.id,
+  threadId: row.chat_thread_id || row.thread_id,
   username: row.username,
   displayName: row.display_name || row.username,
   avatar: row.avatar || '🐶',

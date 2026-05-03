@@ -823,17 +823,17 @@ as $$
   limit greatest(least(p_limit, 50), 1)
 $$;
 
-drop function if exists public.list_public_chat(integer);
 drop function if exists public.post_public_chat(text, text);
+drop function if exists public.list_public_chat(integer);
 drop function if exists public.list_chat_players(text);
 drop function if exists public.list_chat_threads(text);
 drop function if exists public.create_chat_thread(text, text[], text);
-drop function if exists public.list_chat_messages(text, uuid, integer);
 drop function if exists public.post_chat_message(text, uuid, text);
+drop function if exists public.list_chat_messages(text, uuid, integer);
 
 create or replace function public.list_public_chat(p_limit integer default 30)
 returns table (
-  id uuid,
+  message_id uuid,
   username citext,
   display_name text,
   avatar text,
@@ -846,7 +846,7 @@ security definer
 set search_path = public
 as $$
   select
-    recent.id,
+    recent.id as message_id,
     p.username,
     coalesce(nullif(p.display_name, ''), p.username::text) as display_name,
     p.avatar,
@@ -864,7 +864,7 @@ $$;
 
 create or replace function public.post_public_chat(p_session_token text, p_message text)
 returns table (
-  id uuid,
+  message_id uuid,
   username citext,
   display_name text,
   avatar text,
@@ -926,7 +926,7 @@ $$;
 
 create or replace function public.list_chat_threads(p_session_token text)
 returns table (
-  id uuid,
+  chat_thread_id uuid,
   title text,
   member_usernames text[],
   member_names text[],
@@ -945,7 +945,7 @@ begin
 
   return query
   select
-    t.id,
+    t.id as chat_thread_id,
     t.title,
     array_agg(p.username::text order by coalesce(nullif(p.display_name, ''), p.username::text), p.username::text) as member_usernames,
     array_agg(coalesce(nullif(p.display_name, ''), p.username::text) order by coalesce(nullif(p.display_name, ''), p.username::text), p.username::text) as member_names,
@@ -1029,8 +1029,8 @@ create or replace function public.list_chat_messages(
   p_limit integer default 50
 )
 returns table (
-  id uuid,
-  thread_id uuid,
+  message_id uuid,
+  chat_thread_id uuid,
   username citext,
   display_name text,
   avatar text,
@@ -1058,8 +1058,8 @@ begin
 
   return query
   select
-    recent.id,
-    recent.thread_id,
+    recent.id as message_id,
+    recent.thread_id as chat_thread_id,
     p.username,
     coalesce(nullif(p.display_name, ''), p.username::text) as display_name,
     p.avatar,
@@ -1084,8 +1084,8 @@ create or replace function public.post_chat_message(
   p_message text
 )
 returns table (
-  id uuid,
-  thread_id uuid,
+  message_id uuid,
+  chat_thread_id uuid,
   username citext,
   display_name text,
   avatar text,
@@ -1174,3 +1174,5 @@ grant execute on function public.list_chat_threads(text) to anon, authenticated;
 grant execute on function public.create_chat_thread(text, text[], text) to anon, authenticated;
 grant execute on function public.list_chat_messages(text, uuid, integer) to anon, authenticated;
 grant execute on function public.post_chat_message(text, uuid, text) to anon, authenticated;
+
+notify pgrst, 'reload schema';
