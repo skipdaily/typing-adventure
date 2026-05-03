@@ -420,3 +420,4 @@ grant execute on function public.list_chat_messages(text, uuid, integer) to anon
 grant execute on function public.post_chat_message(text, uuid, text) to anon, authenticated;
 
 notify pgrst, 'reload schema';
+select pg_notify('pgrst', 'reload schema');
