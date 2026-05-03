@@ -387,6 +387,7 @@ export default function App() {
   const [shopCategory, setShopCategory] = useState<'avatars' | 'backgrounds' | 'codes'>('avatars');
   const [shopCode, setShopCode] = useState('');
   const [codeMessage, setCodeMessage] = useState({ text: '', type: '' });
+  const [purchasingItemId, setPurchasingItemId] = useState<string | null>(null);
 
   const [timeLeft, setTimeLeft] = useState(TIME_LIMIT);
   const [score, setScore] = useState(0);
@@ -1212,66 +1213,86 @@ export default function App() {
   }
 
   const handleBuyAvatar = async (id: string, price: number) => {
-    if (coins >= price && !ownedAvatars.includes(id)) {
-      if (SUPABASE_ENABLED && currentUser?.sessionToken) {
-        try {
-          const dashboard = await supabaseRpc<any>('purchase_shop_item', {
-            p_session_token: currentUser.sessionToken,
-            p_item_type: 'avatar',
-            p_item_id: id
-          });
-          saveCurrentUser(dashboardToUser(dashboard, currentUser.sessionToken));
-          confetti({ particleCount: 50, spread: 60, origin: { y: 0.8 }, colors: ['#FFD700'] });
-        } catch (error) {
-          setCodeMessage({ text: error instanceof Error ? error.message : 'Could not buy character.', type: 'error' });
-        }
-        return;
-      }
+    setCodeMessage({ text: '', type: '' });
 
-      const newCoins = coins - price;
-      const newOwned = [...ownedAvatars, id];
-      setCoins(newCoins);
-      setOwnedAvatars(newOwned);
-      if (currentUser) {
-        updateCurrentUser(user => ({
-          ...user,
-          coins: newCoins,
-          ownedAvatars: newOwned
-        }));
+    if (ownedAvatars.includes(id) || purchasingItemId) return;
+
+    if (coins < price) {
+      setCodeMessage({ text: 'Not enough coins yet.', type: 'error' });
+      return;
+    }
+
+    setPurchasingItemId(`avatar:${id}`);
+
+    try {
+      if (SUPABASE_ENABLED && currentUser?.sessionToken) {
+        const dashboard = await supabaseRpc<any>('purchase_shop_item', {
+          p_session_token: currentUser.sessionToken,
+          p_item_type: 'avatar',
+          p_item_id: id
+        });
+        saveCurrentUser(dashboardToUser(dashboard, currentUser.sessionToken));
+      } else {
+        const newCoins = coins - price;
+        const newOwned = [...ownedAvatars, id];
+        setCoins(newCoins);
+        setOwnedAvatars(newOwned);
+        if (currentUser) {
+          updateCurrentUser(user => ({
+            ...user,
+            coins: newCoins,
+            ownedAvatars: newOwned
+          }));
+        }
       }
+      setCodeMessage({ text: 'Character purchased!', type: 'success' });
       confetti({ particleCount: 50, spread: 60, origin: { y: 0.8 }, colors: ['#FFD700'] });
+    } catch (error) {
+      setCodeMessage({ text: error instanceof Error ? error.message : 'Could not buy character.', type: 'error' });
+    } finally {
+      setPurchasingItemId(null);
     }
   };
 
   const handleBuyBg = async (id: string, price: number) => {
-    if (coins >= price && !ownedBackgrounds.includes(id)) {
-      if (SUPABASE_ENABLED && currentUser?.sessionToken) {
-        try {
-          const dashboard = await supabaseRpc<any>('purchase_shop_item', {
-            p_session_token: currentUser.sessionToken,
-            p_item_type: 'background',
-            p_item_id: id
-          });
-          saveCurrentUser(dashboardToUser(dashboard, currentUser.sessionToken));
-          confetti({ particleCount: 50, spread: 60, origin: { y: 0.8 }, colors: ['#3b82f6'] });
-        } catch (error) {
-          setCodeMessage({ text: error instanceof Error ? error.message : 'Could not buy background.', type: 'error' });
-        }
-        return;
-      }
+    setCodeMessage({ text: '', type: '' });
 
-      const newCoins = coins - price;
-      const newOwned = [...ownedBackgrounds, id];
-      setCoins(newCoins);
-      setOwnedBackgrounds(newOwned);
-      if (currentUser) {
-        updateCurrentUser(user => ({
-          ...user,
-          coins: newCoins,
-          ownedBackgrounds: newOwned
-        }));
+    if (ownedBackgrounds.includes(id) || purchasingItemId) return;
+
+    if (coins < price) {
+      setCodeMessage({ text: 'Not enough coins yet.', type: 'error' });
+      return;
+    }
+
+    setPurchasingItemId(`background:${id}`);
+
+    try {
+      if (SUPABASE_ENABLED && currentUser?.sessionToken) {
+        const dashboard = await supabaseRpc<any>('purchase_shop_item', {
+          p_session_token: currentUser.sessionToken,
+          p_item_type: 'background',
+          p_item_id: id
+        });
+        saveCurrentUser(dashboardToUser(dashboard, currentUser.sessionToken));
+      } else {
+        const newCoins = coins - price;
+        const newOwned = [...ownedBackgrounds, id];
+        setCoins(newCoins);
+        setOwnedBackgrounds(newOwned);
+        if (currentUser) {
+          updateCurrentUser(user => ({
+            ...user,
+            coins: newCoins,
+            ownedBackgrounds: newOwned
+          }));
+        }
       }
+      setCodeMessage({ text: 'Background purchased!', type: 'success' });
       confetti({ particleCount: 50, spread: 60, origin: { y: 0.8 }, colors: ['#3b82f6'] });
+    } catch (error) {
+      setCodeMessage({ text: error instanceof Error ? error.message : 'Could not buy background.', type: 'error' });
+    } finally {
+      setPurchasingItemId(null);
     }
   };
 
@@ -1924,24 +1945,43 @@ export default function App() {
 
       <div className="flex gap-4 mb-6 border-b-4 border-slate-100 pb-4">
         <button 
-          onClick={() => setShopCategory('avatars')}
+          onClick={() => {
+            setShopCategory('avatars');
+            setCodeMessage({ text: '', type: '' });
+          }}
           className={`px-6 py-3 rounded-2xl font-black uppercase tracking-wider transition-all ${shopCategory === 'avatars' ? 'bg-orange-100 text-orange-600 border-b-4 border-orange-500' : 'text-slate-400 hover:bg-slate-50'}`}
         >
           Characters
         </button>
         <button 
-          onClick={() => setShopCategory('backgrounds')}
+          onClick={() => {
+            setShopCategory('backgrounds');
+            setCodeMessage({ text: '', type: '' });
+          }}
           className={`px-6 py-3 rounded-2xl font-black uppercase tracking-wider transition-all ${shopCategory === 'backgrounds' ? 'bg-blue-100 text-blue-600 border-b-4 border-blue-500' : 'text-slate-400 hover:bg-slate-50'}`}
         >
           Backgrounds
         </button>
         <button 
-          onClick={() => setShopCategory('codes')}
+          onClick={() => {
+            setShopCategory('codes');
+            setCodeMessage({ text: '', type: '' });
+          }}
           className={`px-6 py-3 rounded-2xl font-black uppercase tracking-wider transition-all ${shopCategory === 'codes' ? 'bg-green-100 text-green-600 border-b-4 border-green-500' : 'text-slate-400 hover:bg-slate-50'}`}
         >
           Codes
         </button>
       </div>
+
+      {codeMessage.text && shopCategory !== 'codes' && (
+        <div className={`mb-5 rounded-2xl border-4 px-5 py-3 text-center font-black ${
+          codeMessage.type === 'error'
+            ? 'bg-rose-50 border-rose-100 text-rose-600'
+            : 'bg-emerald-50 border-emerald-100 text-emerald-600'
+        }`}>
+          {codeMessage.text}
+        </div>
+      )}
 
       <div className="flex-1 min-h-[300px]">
         {shopCategory === 'avatars' && (
@@ -1964,10 +2004,10 @@ export default function App() {
                   ) : (
                     <button 
                       onClick={() => handleBuyAvatar(item.id, item.price)}
-                      disabled={coins < item.price}
-                      className={`mt-2 px-4 py-2 rounded-xl font-bold uppercase tracking-wider border-b-4 transition-all w-full flex items-center justify-center gap-1 ${coins >= item.price ? 'bg-yellow-400 border-yellow-500 text-yellow-900 hover:bg-yellow-300 active:border-b-0 active:translate-y-1' : 'bg-slate-200 border-slate-300 text-slate-400 cursor-not-allowed'}`}
+                      disabled={coins < item.price || Boolean(purchasingItemId)}
+                      className={`mt-2 px-4 py-2 rounded-xl font-bold uppercase tracking-wider border-b-4 transition-all w-full flex items-center justify-center gap-1 ${coins >= item.price && !purchasingItemId ? 'bg-yellow-400 border-yellow-500 text-yellow-900 hover:bg-yellow-300 active:border-b-0 active:translate-y-1' : 'bg-slate-200 border-slate-300 text-slate-400 cursor-not-allowed'}`}
                     >
-                      💰 {item.price}
+                      {purchasingItemId === `avatar:${item.id}` ? 'Buying...' : `💰 ${item.price}`}
                     </button>
                   )}
                 </div>
@@ -1999,10 +2039,10 @@ export default function App() {
                       ) : (
                         <button 
                           onClick={() => handleBuyBg(item.id, item.price)}
-                          disabled={coins < item.price}
-                          className={`mt-2 px-4 py-2 rounded-xl font-bold uppercase tracking-wider border-b-4 transition-all w-full flex items-center justify-center gap-1 ${coins >= item.price ? 'bg-yellow-400 border-yellow-500 text-yellow-900 hover:bg-yellow-300 active:border-b-0 active:translate-y-1' : 'bg-slate-200 border-slate-300 text-slate-400 cursor-not-allowed'}`}
+                          disabled={coins < item.price || Boolean(purchasingItemId)}
+                          className={`mt-2 px-4 py-2 rounded-xl font-bold uppercase tracking-wider border-b-4 transition-all w-full flex items-center justify-center gap-1 ${coins >= item.price && !purchasingItemId ? 'bg-yellow-400 border-yellow-500 text-yellow-900 hover:bg-yellow-300 active:border-b-0 active:translate-y-1' : 'bg-slate-200 border-slate-300 text-slate-400 cursor-not-allowed'}`}
                         >
-                          💰 {item.price}
+                          {purchasingItemId === `background:${item.id}` ? 'Buying...' : `💰 ${item.price}`}
                         </button>
                       )}
                     </>
