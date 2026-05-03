@@ -64,6 +64,7 @@ const MATH_LIST_HARD = mapToGameItem([
 
 const TIME_LIMIT = 45; // 45 seconds
 const COINS_PER_CORRECT_ANSWER = 5;
+const BONUS_POPUP_REWARD = 10;
 const LIVE_CHAT_REFRESH_MS = 2500;
 const USERS_STORAGE_KEY = 'typingAdventureUsers';
 const CURRENT_USER_STORAGE_KEY = 'typingAdventureCurrentUser';
@@ -162,8 +163,32 @@ interface LeaderboardEntry {
 
 type LeaderboardData = Record<string, LeaderboardEntry[]>;
 type UserAccounts = Record<string, UserAccount>;
+type SecretCode = 'magic' | 'ninja' | 'hacker';
+type CollectionPopup = 'characters' | 'worlds' | null;
+
+const SECRET_CODE_REWARDS: Record<SecretCode, { avatar: string; bg: string; label: string; colors: string[] }> = {
+  magic: {
+    avatar: '🧙‍♂️',
+    bg: 'magic',
+    label: 'Magic',
+    colors: ['#ec4899', '#8b5cf6', '#f59e0b']
+  },
+  ninja: {
+    avatar: '🥷',
+    bg: 'ninja',
+    label: 'Ninja',
+    colors: ['#000000', '#ffffff', '#f43f5e']
+  },
+  hacker: {
+    avatar: '👾',
+    bg: 'hacker',
+    label: 'Hacker',
+    colors: ['#22c55e', '#000000', '#14b8a6']
+  }
+};
 
 const normalizeUsername = (name: string) => name.trim().toLowerCase();
+const isSecretCode = (code: string): code is SecretCode => code in SECRET_CODE_REWARDS;
 
 const supabaseRpc = async <T,>(functionName: string, payload: Record<string, unknown>): Promise<T> => {
   if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
@@ -356,6 +381,7 @@ export default function App() {
   const [showCredentialWarning, setShowCredentialWarning] = useState(false);
   const [showDashboard, setShowDashboard] = useState(false);
   const [selectedProfileName, setSelectedProfileName] = useState<string | null>(null);
+  const [collectionPopup, setCollectionPopup] = useState<CollectionPopup>(null);
   const [profileDisplayName, setProfileDisplayName] = useState('');
   const [profileAvatarName, setProfileAvatarName] = useState('');
   const [profileMessage, setProfileMessage] = useState({ text: '', type: '' });
@@ -1297,8 +1323,54 @@ export default function App() {
     }
   };
 
+  const unlockSecretCode = async (code: SecretCode) => {
+    const reward = SECRET_CODE_REWARDS[code];
+    const newThemes = unlockedThemes.includes(code) ? unlockedThemes : [...unlockedThemes, code];
+
+    if (SUPABASE_ENABLED && currentUser?.sessionToken) {
+      try {
+        await supabaseRpc<any>('unlock_theme', {
+          p_session_token: currentUser.sessionToken,
+          p_theme_id: code
+        });
+        const dashboard = await supabaseRpc<any>('update_player_style', {
+          p_session_token: currentUser.sessionToken,
+          p_avatar: reward.avatar,
+          p_selected_bg: reward.bg
+        });
+        saveCurrentUser(dashboardToUser(dashboard, currentUser.sessionToken));
+        setCodeMessage({ text: `${reward.label} background and emoji unlocked!`, type: 'success' });
+        setShopCode('');
+        confetti({ particleCount: 80, spread: 70, colors: reward.colors });
+      } catch (error) {
+        setCodeMessage({ text: error instanceof Error ? error.message : 'Could not unlock secret code.', type: 'error' });
+      }
+      return;
+    }
+
+    setUnlockedThemes(newThemes);
+    setAvatar(reward.avatar);
+    setSelectedBg(reward.bg);
+    if (currentUser) {
+      updateCurrentUser(user => ({
+        ...user,
+        avatar: reward.avatar,
+        selectedBg: reward.bg,
+        unlockedThemes: newThemes
+      }));
+    }
+    setCodeMessage({ text: `${reward.label} background and emoji unlocked!`, type: 'success' });
+    setShopCode('');
+    confetti({ particleCount: 80, spread: 70, colors: reward.colors });
+  };
+
   const handleRedeemCode = async () => {
     const c = shopCode.toLowerCase().trim();
+    if (isSecretCode(c)) {
+      await unlockSecretCode(c);
+      return;
+    }
+
     if (SUPABASE_ENABLED && currentUser?.sessionToken) {
       try {
         const dashboard = await supabaseRpc<any>('redeem_code', {
@@ -1534,6 +1606,31 @@ export default function App() {
       const otherNames = thread.memberNames.filter((_, index) => thread.memberUsernames[index] !== currentUser?.username);
       return otherNames.length > 0 ? otherNames.join(', ') : 'My Chat';
     };
+    const characterCollection = [
+      ...profile.ownedAvatars.map(avatarId => {
+        const shopAvatar = SHOP_AVATARS.find(item => item.id === avatarId);
+        return shopAvatar ? { id: shopAvatar.id, emoji: shopAvatar.emoji, label: shopAvatar.id.replaceAll('_', ' ') } : null;
+      }).filter(Boolean),
+      ...profile.unlockedThemes
+        .filter(isSecretCode)
+        .map(theme => ({
+          id: `secret-${theme}`,
+          emoji: SECRET_CODE_REWARDS[theme].avatar,
+          label: `${SECRET_CODE_REWARDS[theme].label} secret`
+        }))
+    ] as Array<{ id: string; emoji: string; label: string }>;
+    const worldCollection = [
+      ...profile.ownedBackgrounds.map(backgroundId => {
+        const shopBackground = SHOP_BACKGROUNDS.find(item => item.id === backgroundId);
+        return shopBackground ? { id: shopBackground.id, emoji: shopBackground.emoji, label: shopBackground.label } : null;
+      }).filter(Boolean),
+      ...profile.unlockedThemes.map(theme => {
+        const secretBackground = SECRET_BACKGROUNDS.find(item => item.id === theme);
+        return secretBackground ? { id: `secret-${secretBackground.id}`, emoji: secretBackground.emoji, label: secretBackground.label } : null;
+      }).filter(Boolean)
+    ] as Array<{ id: string; emoji: string; label: string }>;
+    const visibleCollection = collectionPopup === 'characters' ? characterCollection : worldCollection;
+    const collectionTitle = collectionPopup === 'characters' ? 'Characters' : 'Worlds';
 
     return (
       <motion.div
@@ -1553,7 +1650,10 @@ export default function App() {
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={() => {
+              setCollectionPopup(null);
+              onClose();
+            }}
             className="w-12 h-12 bg-slate-100 text-slate-600 rounded-full flex items-center justify-center hover:bg-slate-200 transition-colors shrink-0"
           >
             <X size={24} />
@@ -1870,14 +1970,20 @@ export default function App() {
                 <div className="text-3xl font-black text-yellow-600">{profile.coins}</div>
                 <div className="text-xs uppercase font-black text-slate-400">Coins</div>
               </div>
-              <div className="bg-white rounded-2xl p-4 text-center border-2 border-slate-100">
+              <button
+                onClick={() => setCollectionPopup('characters')}
+                className="bg-white rounded-2xl p-4 text-center border-2 border-slate-100 hover:border-orange-200 hover:bg-orange-50 transition-all"
+              >
                 <div className="text-3xl font-black text-orange-600">{profile.ownedAvatars.length}</div>
                 <div className="text-xs uppercase font-black text-slate-400">Characters</div>
-              </div>
-              <div className="bg-white rounded-2xl p-4 text-center border-2 border-slate-100">
+              </button>
+              <button
+                onClick={() => setCollectionPopup('worlds')}
+                className="bg-white rounded-2xl p-4 text-center border-2 border-slate-100 hover:border-blue-200 hover:bg-blue-50 transition-all"
+              >
                 <div className="text-3xl font-black text-blue-600">{profile.ownedBackgrounds.length}</div>
                 <div className="text-xs uppercase font-black text-slate-400">Worlds</div>
-              </div>
+              </button>
             </div>
           </section>
 
@@ -1917,6 +2023,51 @@ export default function App() {
             )}
           </section>
         </div>
+
+        <AnimatePresence>
+          {collectionPopup && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4"
+              onClick={() => setCollectionPopup(null)}
+            >
+              <motion.div
+                initial={{ scale: 0.94, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.94, y: 20 }}
+                className="w-full max-w-2xl bg-white rounded-[32px] border-4 border-slate-100 shadow-2xl p-6 md:p-8"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="flex items-center justify-between gap-4 mb-5">
+                  <h2 className="text-3xl font-black text-slate-800">{collectionTitle}</h2>
+                  <button
+                    onClick={() => setCollectionPopup(null)}
+                    className="w-10 h-10 bg-slate-100 text-slate-600 rounded-full flex items-center justify-center hover:bg-slate-200 transition-colors"
+                  >
+                    <X size={22} />
+                  </button>
+                </div>
+
+                {visibleCollection.length === 0 ? (
+                  <div className="bg-slate-50 border-4 border-slate-100 rounded-3xl p-8 text-center text-slate-400 font-black">
+                    Nothing collected yet.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-[55vh] overflow-y-auto pr-1">
+                    {visibleCollection.map(item => (
+                      <div key={item.id} className="bg-slate-50 border-4 border-slate-100 rounded-3xl p-4 text-center">
+                        <div className="text-5xl mb-2">{item.emoji}</div>
+                        <div className="font-black text-slate-700 capitalize">{item.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
     );
   };
@@ -2561,7 +2712,7 @@ export default function App() {
               onClick={(e) => {
                 e.stopPropagation();
                 inputRef.current?.focus();
-                setScore(s => s + 50);
+                setScore(s => s + BONUS_POPUP_REWARD);
                 setFloatingEgg(null);
                 confetti({
                   particleCount: 50,
@@ -2736,7 +2887,7 @@ export default function App() {
           onClick={() => setGameState('LOBBY')}
           className="group relative inline-flex justify-center items-center gap-3 px-8 py-5 text-2xl font-black text-slate-600 bg-slate-100 rounded-2xl border-b-8 border-slate-300 hover:bg-slate-200 transition-all active:border-b-0 active:translate-y-2"
         >
-          Change Player
+          Go Back
         </button>
         <button 
           onClick={startCountdown}
