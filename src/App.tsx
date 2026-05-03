@@ -63,6 +63,7 @@ const MATH_LIST_HARD = mapToGameItem([
 ]);
 
 const TIME_LIMIT = 60; // 60 seconds
+const LIVE_CHAT_REFRESH_MS = 2500;
 const USERS_STORAGE_KEY = 'typingAdventureUsers';
 const CURRENT_USER_STORAGE_KEY = 'typingAdventureCurrentUser';
 const SUPABASE_SESSION_STORAGE_KEY = 'typingAdventureSupabaseSession';
@@ -463,7 +464,7 @@ export default function App() {
     }
   };
 
-  const loadPublicChat = async () => {
+  const loadPublicChat = async (silent = false) => {
     if (!SUPABASE_ENABLED) return;
 
     try {
@@ -472,7 +473,7 @@ export default function App() {
       });
       setPublicChatMessages(rows.map(publicChatRowToMessage));
     } catch (error) {
-      console.error(error);
+      if (!silent) console.error(error);
     }
   };
 
@@ -502,7 +503,7 @@ export default function App() {
     }
   };
 
-  const loadChatPlayers = async () => {
+  const loadChatPlayers = async (silent = false) => {
     if (!SUPABASE_ENABLED || !currentUser?.sessionToken) return;
 
     try {
@@ -511,11 +512,11 @@ export default function App() {
       });
       setChatPlayers(rows.map(chatPlayerRowToPlayer));
     } catch (error) {
-      console.error(error);
+      if (!silent) console.error(error);
     }
   };
 
-  const loadChatMessages = async (threadId: string) => {
+  const loadChatMessages = async (threadId: string, silent = false) => {
     if (!SUPABASE_ENABLED || !currentUser?.sessionToken) return;
 
     try {
@@ -526,11 +527,13 @@ export default function App() {
       });
       setChatMessages(rows.map(chatMessageRowToMessage));
     } catch (error) {
-      setChatError(error instanceof Error ? error.message : 'Could not load messages.');
+      if (!silent) {
+        setChatError(error instanceof Error ? error.message : 'Could not load messages.');
+      }
     }
   };
 
-  const loadChatThreads = async (preferredThreadId?: string) => {
+  const loadChatThreads = async (preferredThreadId?: string, silent = false) => {
     if (!SUPABASE_ENABLED || !currentUser?.sessionToken) return;
 
     try {
@@ -547,12 +550,14 @@ export default function App() {
       setSelectedChatThreadId(nextSelectedId);
 
       if (nextSelectedId) {
-        await loadChatMessages(nextSelectedId);
+        await loadChatMessages(nextSelectedId, silent);
       } else {
         setChatMessages([]);
       }
     } catch (error) {
-      setChatError(error instanceof Error ? error.message : 'Could not load chats.');
+      if (!silent) {
+        setChatError(error instanceof Error ? error.message : 'Could not load chats.');
+      }
     }
   };
 
@@ -812,6 +817,35 @@ export default function App() {
       loadChatThreads();
     }
   }, [currentUser?.sessionToken]);
+
+  useEffect(() => {
+    if (!SUPABASE_ENABLED || !currentUser?.sessionToken || gameState !== 'LOBBY') return;
+
+    let cancelled = false;
+    let refreshInProgress = false;
+
+    const refreshLiveChat = async () => {
+      if (cancelled || refreshInProgress) return;
+      refreshInProgress = true;
+
+      try {
+        await loadPublicChat(true);
+
+        if (showDashboard) {
+          await loadChatPlayers(true);
+          await loadChatThreads(selectedChatThreadId || undefined, true);
+        }
+      } finally {
+        refreshInProgress = false;
+      }
+    };
+
+    const refreshTimer = setInterval(refreshLiveChat, LIVE_CHAT_REFRESH_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(refreshTimer);
+    };
+  }, [currentUser?.sessionToken, gameState, showDashboard, selectedChatThreadId]);
 
   useEffect(() => {
     refreshRemoteLeaderboard(gameMode);
@@ -1546,6 +1580,9 @@ export default function App() {
             <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
               <h2 className="text-2xl font-black text-slate-800 flex items-center gap-2">
                 <MessageCircle className="text-indigo-500" /> Messages
+                <span className="bg-emerald-50 text-emerald-600 border-2 border-emerald-100 rounded-full px-2 py-1 text-xs uppercase tracking-wider">
+                  Live
+                </span>
               </h2>
               <button
                 onClick={() => {
@@ -2367,6 +2404,9 @@ export default function App() {
           <div className="flex items-center justify-between gap-2 mb-3">
             <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
               <MessageCircle className="text-indigo-500" size={22} /> Chat
+              <span className="bg-emerald-50 text-emerald-600 border-2 border-emerald-100 rounded-full px-2 py-1 text-[10px] uppercase tracking-wider">
+                Live
+              </span>
             </h2>
             <button
               onClick={loadPublicChat}
