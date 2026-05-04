@@ -49,7 +49,7 @@ drop function if exists public.add_chat_member(text, uuid, text);
 drop function if exists public.post_chat_message(text, uuid, text);
 drop function if exists public.list_chat_messages(text, uuid, integer);
 
-create or replace function public.list_public_chat(p_limit integer default 30)
+create or replace function public.list_public_chat(p_limit integer default 100)
 returns table (
   message_id uuid,
   username citext,
@@ -74,7 +74,7 @@ as $$
     select pcm.*
     from public.public_chat_messages pcm
     order by pcm.created_at desc
-    limit greatest(least(p_limit, 50), 1)
+    limit greatest(least(p_limit, 100), 1)
   ) recent
   join public.players p on p.id = recent.player_id
   order by recent.created_at desc
@@ -110,8 +110,16 @@ begin
   insert into public.public_chat_messages (player_id, message)
   values (v_player_id, v_message);
 
+  delete from public.public_chat_messages pcm
+  where pcm.id in (
+    select old_messages.id
+    from public.public_chat_messages old_messages
+    order by old_messages.created_at desc
+    offset 100
+  );
+
   return query
-  select * from public.list_public_chat(30);
+  select * from public.list_public_chat(100);
 end;
 $$;
 
@@ -391,12 +399,22 @@ begin
   insert into public.chat_messages (thread_id, sender_id, message)
   values (p_thread_id, v_player_id, v_message);
 
+  delete from public.chat_messages cm
+  where cm.thread_id = p_thread_id
+    and cm.id in (
+      select old_messages.id
+      from public.chat_messages old_messages
+      where old_messages.thread_id = p_thread_id
+      order by old_messages.created_at desc
+      offset 100
+    );
+
   update public.chat_threads
   set updated_at = now()
   where public.chat_threads.id = p_thread_id;
 
   return query
-  select * from public.list_chat_messages(p_session_token, p_thread_id, 50);
+  select * from public.list_chat_messages(p_session_token, p_thread_id, 100);
 end;
 $$;
 

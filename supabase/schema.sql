@@ -783,8 +783,13 @@ end;
 $$;
 
 drop function if exists public.list_leaderboard(public.game_mode, integer);
+drop function if exists public.list_leaderboard(public.game_mode, public.difficulty_level, integer);
 
-create or replace function public.list_leaderboard(p_mode public.game_mode default null, p_limit integer default 10)
+create or replace function public.list_leaderboard(
+  p_mode public.game_mode default null,
+  p_difficulty public.difficulty_level default null,
+  p_limit integer default 15
+)
 returns table (
   username citext,
   display_name text,
@@ -794,33 +799,54 @@ returns table (
   best_accuracy integer,
   total_points_earned integer,
   games_played integer,
-  achievements_count bigint
+  achievements_count bigint,
+  best_score_at timestamptz
 )
 language sql
 stable
 security definer
 set search_path = public
 as $$
+  with ranked_results as (
+    select
+      gr.*,
+      row_number() over (
+        partition by gr.player_id
+        order by gr.score desc, gr.accuracy desc, gr.played_at asc
+      ) as score_rank,
+      count(*) over (partition by gr.player_id) as filtered_games_played
+    from public.game_results gr
+    where (p_mode is null or gr.mode = p_mode)
+      and (p_difficulty is null or gr.difficulty = p_difficulty)
+  )
   select
     p.username,
     coalesce(nullif(p.display_name, ''), p.username::text) as display_name,
     p.avatar_name,
     p.avatar,
-    coalesce(ms.best_score, p.best_score) as best_score,
-    coalesce(ms.best_accuracy, p.best_accuracy) as best_accuracy,
+    rr.score as best_score,
+    rr.accuracy as best_accuracy,
     p.total_points_earned,
-    coalesce(ms.games_played, p.games_played) as games_played,
-    count(pa.achievement_id) as achievements_count
-  from public.players p
-  left join public.player_mode_stats ms
-    on ms.player_id = p.id
-   and (p_mode is not null and ms.mode = p_mode)
+    rr.filtered_games_played::integer as games_played,
+    count(pa.achievement_id) as achievements_count,
+    rr.played_at as best_score_at
+  from ranked_results rr
+  join public.players p on p.id = rr.player_id
   left join public.player_achievements pa on pa.player_id = p.id
-  where (p_mode is null and p.games_played > 0)
-     or (p_mode is not null and ms.games_played > 0)
-  group by p.id, ms.best_score, ms.best_accuracy, ms.games_played
-  order by coalesce(ms.best_score, p.best_score) desc, p.total_points_earned desc
-  limit greatest(least(p_limit, 50), 1)
+  where rr.score_rank = 1
+  group by
+    p.id,
+    p.username,
+    p.display_name,
+    p.avatar_name,
+    p.avatar,
+    p.total_points_earned,
+    rr.score,
+    rr.accuracy,
+    rr.filtered_games_played,
+    rr.played_at
+  order by rr.score desc, rr.accuracy desc, rr.played_at asc
+  limit greatest(least(p_limit, 15), 1)
 $$;
 
 drop function if exists public.post_public_chat(text, text);
@@ -832,7 +858,7 @@ drop function if exists public.add_chat_member(text, uuid, text);
 drop function if exists public.post_chat_message(text, uuid, text);
 drop function if exists public.list_chat_messages(text, uuid, integer);
 
-create or replace function public.list_public_chat(p_limit integer default 30)
+create or replace function public.list_public_chat(p_limit integer default 100)
 returns table (
   message_id uuid,
   username citext,
@@ -857,7 +883,7 @@ as $$
     select pcm.*
     from public.public_chat_messages pcm
     order by pcm.created_at desc
-    limit greatest(least(p_limit, 50), 1)
+    limit greatest(least(p_limit, 100), 1)
   ) recent
   join public.players p on p.id = recent.player_id
   order by recent.created_at desc
@@ -893,8 +919,16 @@ begin
   insert into public.public_chat_messages (player_id, message)
   values (v_player_id, v_message);
 
+  delete from public.public_chat_messages pcm
+  where pcm.id in (
+    select old_messages.id
+    from public.public_chat_messages old_messages
+    order by old_messages.created_at desc
+    offset 100
+  );
+
   return query
-  select * from public.list_public_chat(30);
+  select * from public.list_public_chat(100);
 end;
 $$;
 
@@ -1174,12 +1208,22 @@ begin
   insert into public.chat_messages (thread_id, sender_id, message)
   values (p_thread_id, v_player_id, v_message);
 
+  delete from public.chat_messages cm
+  where cm.thread_id = p_thread_id
+    and cm.id in (
+      select old_messages.id
+      from public.chat_messages old_messages
+      where old_messages.thread_id = p_thread_id
+      order by old_messages.created_at desc
+      offset 100
+    );
+
   update public.chat_threads
   set updated_at = now()
   where public.chat_threads.id = p_thread_id;
 
   return query
-  select * from public.list_chat_messages(p_session_token, p_thread_id, 50);
+  select * from public.list_chat_messages(p_session_token, p_thread_id, 100);
 end;
 $$;
 
@@ -1217,7 +1261,7 @@ grant execute on function public.unlock_theme(text, text) to anon, authenticated
 grant execute on function public.purchase_shop_item(text, public.shop_item_type, text) to anon, authenticated;
 grant execute on function public.redeem_code(text, text) to anon, authenticated;
 grant execute on function public.record_game_result(text, public.game_mode, public.difficulty_level, integer, integer, integer, integer) to anon, authenticated;
-grant execute on function public.list_leaderboard(public.game_mode, integer) to anon, authenticated;
+grant execute on function public.list_leaderboard(public.game_mode, public.difficulty_level, integer) to anon, authenticated;
 grant execute on function public.list_public_chat(integer) to anon, authenticated;
 grant execute on function public.post_public_chat(text, text) to anon, authenticated;
 grant execute on function public.list_chat_players(text) to anon, authenticated;

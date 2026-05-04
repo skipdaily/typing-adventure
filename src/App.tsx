@@ -35,6 +35,8 @@ const TIME_LIMIT = 45; // 45 seconds
 const COINS_PER_CORRECT_ANSWER = 5;
 const BONUS_POPUP_REWARD = 10;
 const LIVE_CHAT_REFRESH_MS = 2500;
+const CHAT_VISIBLE_MESSAGE_LIMIT = 20;
+const CHAT_SAVED_MESSAGE_LIMIT = 100;
 const USERS_STORAGE_KEY = 'typingAdventureUsers';
 const CURRENT_USER_STORAGE_KEY = 'typingAdventureCurrentUser';
 const SUPABASE_SESSION_STORAGE_KEY = 'typingAdventureSupabaseSession';
@@ -92,6 +94,23 @@ const GAME_LISTS: Record<GameMode, Record<Difficulty, GameItem[]>> = {
 };
 
 const getGameList = (mode: GameMode, level: Difficulty) => GAME_LISTS[mode][level];
+
+const GAME_MODE_LABELS: Record<GameMode, string> = {
+  words: 'Words',
+  numbers: 'Numbers',
+  math: 'Math/Geo',
+  equations: 'Solve',
+  flipper: 'Flipper',
+  emoji: 'Emojis',
+  scramble: 'Scramble',
+  opposites: 'Opposites'
+};
+
+const DIFFICULTY_LABELS: Record<Difficulty, string> = {
+  easy: '3-5 yrs',
+  medium: '6-8 yrs',
+  hard: '9+ yrs'
+};
 
 interface ModeStats {
   gamesPlayed: number;
@@ -173,6 +192,16 @@ interface LeaderboardEntry {
   accuracy: number;
   avatar: string;
   date: string;
+}
+
+interface TopEarner {
+  username: string;
+  displayName: string;
+  avatarName: string;
+  avatar: string;
+  score: number;
+  accuracy: number;
+  achievedAt: string;
 }
 
 type LeaderboardData = Record<string, LeaderboardEntry[]>;
@@ -261,31 +290,26 @@ const dashboardToUser = (dashboard: any, sessionToken?: string): UserAccount => 
   }))
 });
 
-const leaderboardRowToUser = (row: any, mode: GameMode): UserAccount => ({
+const leaderboardRowToTopEarner = (row: any): TopEarner => ({
   username: row.username,
   displayName: row.display_name || row.username,
   avatarName: row.avatar_name || 'Guide',
-  createdAt: '',
   avatar: row.avatar || '🐶',
-  selectedBg: 'paper',
-  coins: 0,
-  ownedAvatars: [],
-  ownedBackgrounds: [],
-  unlockedThemes: [],
-  totalPointsEarned: row.total_points_earned || 0,
-  gamesPlayed: row.games_played || 0,
-  bestScore: row.best_score || 0,
-  bestAccuracy: row.best_accuracy ?? 100,
-  achievements: Array.from({ length: Number(row.achievements_count || 0) }, (_, index) => `Achievement ${index + 1}`),
-  modeStats: {
-    [mode]: {
-      gamesPlayed: row.games_played || 0,
-      bestScore: row.best_score || 0,
-      bestAccuracy: row.best_accuracy ?? 100
-    }
-  },
-  recentGames: []
+  score: row.best_score || 0,
+  accuracy: row.best_accuracy ?? 100,
+  achievedAt: row.best_score_at || ''
 });
+
+const formatTopEarnerDate = (date?: string) => {
+  if (!date) return 'Date unknown';
+  const parsedDate = new Date(date);
+  if (Number.isNaN(parsedDate.getTime())) return date;
+  return parsedDate.toLocaleDateString([], {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric'
+  });
+};
 
 const formatChatTime = (date?: string) => {
   if (!date) return '';
@@ -303,6 +327,16 @@ const publicChatRowToMessage = (row: any): PublicChatMessage => ({
 
 const sortPublicChatNewestFirst = (messages: PublicChatMessage[]) => (
   [...messages].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+);
+
+const limitPublicChatMessages = (messages: PublicChatMessage[]) => (
+  sortPublicChatNewestFirst(messages).slice(0, CHAT_SAVED_MESSAGE_LIMIT)
+);
+
+const limitChatMessages = (messages: ChatMessage[]) => (
+  [...messages]
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    .slice(-CHAT_SAVED_MESSAGE_LIMIT)
 );
 
 const chatPlayerRowToPlayer = (row: any): ChatPlayer => ({
@@ -385,7 +419,7 @@ export default function App() {
   const [countdown, setCountdown] = useState<number | null>(null);
   const [leaderboard, setLeaderboard] = useState<LeaderboardData>({});
   const [accounts, setAccounts] = useState<UserAccounts>({});
-  const [remoteLeaderboard, setRemoteLeaderboard] = useState<UserAccount[]>([]);
+  const [remoteLeaderboard, setRemoteLeaderboard] = useState<TopEarner[]>([]);
   const [currentUser, setCurrentUser] = useState<UserAccount | null>(null);
   const [authMode, setAuthMode] = useState<AuthMode>('create');
   const [authUsername, setAuthUsername] = useState('');
@@ -496,15 +530,16 @@ export default function App() {
     }
   }, [currentUser]);
 
-  const refreshRemoteLeaderboard = async (mode: GameMode = gameMode) => {
+  const refreshRemoteLeaderboard = async (mode: GameMode = gameMode, level: Difficulty = difficulty) => {
     if (!SUPABASE_ENABLED) return;
 
     try {
       const rows = await supabaseRpc<any[]>('list_leaderboard', {
         p_mode: mode,
-        p_limit: 10
+        p_difficulty: level,
+        p_limit: 15
       });
-      setRemoteLeaderboard(rows.map(row => leaderboardRowToUser(row, mode)));
+      setRemoteLeaderboard(rows.map(leaderboardRowToTopEarner));
     } catch (error) {
       console.error(error);
     }
@@ -515,9 +550,9 @@ export default function App() {
 
     try {
       const rows = await supabaseRpc<any[]>('list_public_chat', {
-        p_limit: 30
+        p_limit: CHAT_SAVED_MESSAGE_LIMIT
       });
-      setPublicChatMessages(sortPublicChatNewestFirst(rows.map(publicChatRowToMessage)));
+      setPublicChatMessages(limitPublicChatMessages(rows.map(publicChatRowToMessage)));
     } catch (error) {
       if (!silent) console.error(error);
     }
@@ -542,7 +577,7 @@ export default function App() {
         p_session_token: currentUser.sessionToken,
         p_message: message
       });
-      setPublicChatMessages(sortPublicChatNewestFirst(rows.map(publicChatRowToMessage)));
+      setPublicChatMessages(limitPublicChatMessages(rows.map(publicChatRowToMessage)));
       setPublicChatText('');
     } catch (error) {
       setPublicChatError(error instanceof Error ? error.message : 'Could not send chat.');
@@ -569,9 +604,9 @@ export default function App() {
       const rows = await supabaseRpc<any[]>('list_chat_messages', {
         p_session_token: currentUser.sessionToken,
         p_thread_id: threadId,
-        p_limit: 50
+        p_limit: CHAT_SAVED_MESSAGE_LIMIT
       });
-      setChatMessages(rows.map(chatMessageRowToMessage));
+      setChatMessages(limitChatMessages(rows.map(chatMessageRowToMessage)));
     } catch (error) {
       if (!silent) {
         setChatError(error instanceof Error ? error.message : 'Could not load messages.');
@@ -687,7 +722,7 @@ export default function App() {
         p_thread_id: selectedChatThreadId,
         p_message: message
       });
-      setChatMessages(rows.map(chatMessageRowToMessage));
+      setChatMessages(limitChatMessages(rows.map(chatMessageRowToMessage)));
       setChatText('');
       setChatError('');
       await loadChatThreads(selectedChatThreadId);
@@ -894,8 +929,8 @@ export default function App() {
   }, [currentUser?.sessionToken, gameState, showDashboard, selectedChatThreadId]);
 
   useEffect(() => {
-    refreshRemoteLeaderboard(gameMode);
-  }, [gameMode]);
+    refreshRemoteLeaderboard(gameMode, difficulty);
+  }, [gameMode, difficulty]);
 
   // Timer Effect
   useEffect(() => {
@@ -1081,7 +1116,7 @@ export default function App() {
           p_total_keystrokes: totalKeystrokes
         });
         saveCurrentUser(dashboardToUser(dashboard, currentUser.sessionToken));
-        await refreshRemoteLeaderboard(gameMode);
+        await refreshRemoteLeaderboard(gameMode, difficulty);
       } catch (error) {
         console.error(error);
       }
@@ -1370,6 +1405,13 @@ export default function App() {
 
   const handleOpenProfile = async (username: string) => {
     const normalized = normalizeUsername(username);
+    setCollectionPopup(null);
+
+    if (currentUser && normalized === normalizeUsername(currentUser.username)) {
+      setSelectedProfileName(null);
+      setShowDashboard(true);
+      return;
+    }
 
     if (SUPABASE_ENABLED) {
       try {
@@ -1382,6 +1424,7 @@ export default function App() {
           localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(nextAccounts));
           return nextAccounts;
         });
+        setShowDashboard(false);
         setSelectedProfileName(normalized);
       } catch (error) {
         console.error(error);
@@ -1389,6 +1432,7 @@ export default function App() {
       return;
     }
 
+    setShowDashboard(false);
     setSelectedProfileName(normalized);
   };
 
@@ -1562,6 +1606,18 @@ export default function App() {
     const isCurrentUserDashboard = currentUser?.username === profile.username;
     const selectedChatThread = chatThreads.find(thread => thread.id === selectedChatThreadId);
     const availableChatPlayers = chatPlayers.filter(player => !newChatMembers.includes(player.username));
+    const dashboardPlayers = [
+      ...(currentUser ? [{
+        username: currentUser.username,
+        displayName: currentUser.displayName || currentUser.username,
+        avatar: currentUser.avatar
+      }] : []),
+      ...chatPlayers
+    ]
+      .filter((player, index, players) => (
+        players.findIndex(other => normalizeUsername(other.username) === normalizeUsername(player.username)) === index
+      ))
+      .sort((a, b) => (a.displayName || a.username).localeCompare(b.displayName || b.username));
     const availableSelectedChatPlayers = selectedChatThread
       ? chatPlayers.filter(player => !selectedChatThread.memberUsernames.some(username => normalizeUsername(username) === normalizeUsername(player.username)))
       : [];
@@ -1674,15 +1730,34 @@ export default function App() {
                   Live
                 </span>
               </h2>
-              <button
-                onClick={() => {
-                  loadChatPlayers();
-                  loadChatThreads();
-                }}
-                className="bg-white text-slate-500 font-black px-4 py-2 rounded-xl border-2 border-slate-100 hover:border-indigo-200 transition-all"
-              >
-                Refresh
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                {SUPABASE_ENABLED && (
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      if (e.target.value) handleOpenProfile(e.target.value);
+                    }}
+                    className="bg-white text-slate-600 font-black px-4 py-2 rounded-xl border-2 border-slate-100 hover:border-indigo-200 outline-none focus:border-indigo-300 transition-all"
+                    aria-label="View player dashboard"
+                  >
+                    <option value="">Players</option>
+                    {dashboardPlayers.map(player => (
+                      <option key={player.username} value={player.username}>
+                        {player.avatar} {player.displayName} (@{player.username})
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <button
+                  onClick={() => {
+                    loadChatPlayers();
+                    loadChatThreads();
+                  }}
+                  className="bg-white text-slate-500 font-black px-4 py-2 rounded-xl border-2 border-slate-100 hover:border-indigo-200 transition-all"
+                >
+                  Refresh
+                </button>
+              </div>
             </div>
 
             {!SUPABASE_ENABLED ? (
@@ -1831,22 +1906,39 @@ export default function App() {
                         )}
                       </div>
 
-                      <div className="flex-1 min-h-0 max-h-72 overflow-y-auto space-y-3 pr-1">
+                      <div
+                        className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-1"
+                        style={{ maxHeight: `${CHAT_VISIBLE_MESSAGE_LIMIT * 4.5}rem` }}
+                        aria-label={`Recent chat messages, showing up to ${CHAT_SAVED_MESSAGE_LIMIT}`}
+                      >
                         {chatMessages.length === 0 ? (
                           <div className="h-full flex items-center justify-center text-slate-400 font-bold text-center">
                             Send the first message.
                           </div>
                         ) : chatMessages.map(message => (
                           <div key={message.id} className={`flex gap-2 ${message.isMine ? 'justify-end' : 'justify-start'}`}>
-                            {!message.isMine && <div className="text-2xl shrink-0">{message.avatar}</div>}
+                            {!message.isMine && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenProfile(message.username)}
+                                className="text-2xl shrink-0 self-start hover:scale-110 transition-transform"
+                                aria-label={`Open ${message.displayName}'s profile`}
+                              >
+                                {message.avatar}
+                              </button>
+                            )}
                             <div className={`max-w-[78%] rounded-2xl px-4 py-3 border-2 ${
                               message.isMine
                                 ? 'bg-indigo-500 text-white border-indigo-600'
                                 : 'bg-slate-50 text-slate-700 border-slate-100'
                             }`}>
-                              <div className={`text-[11px] font-black uppercase tracking-wider mb-1 ${message.isMine ? 'text-indigo-100' : 'text-slate-400'}`}>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenProfile(message.username)}
+                                className={`text-left text-[11px] font-black uppercase tracking-wider mb-1 hover:underline ${message.isMine ? 'text-indigo-100' : 'text-slate-400'}`}
+                              >
                                 {message.displayName} · {formatChatTime(message.createdAt)}
-                              </div>
+                              </button>
                               <div className="font-bold break-words">{message.message}</div>
                             </div>
                           </div>
@@ -2044,19 +2136,25 @@ export default function App() {
     >
       <div className="absolute top-0 left-0 w-full h-4 bg-yellow-400"></div>
       
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex flex-wrap justify-between items-start gap-4 mb-8">
         <div>
           <h1 className="text-4xl md:text-5xl font-black text-slate-800 flex items-center gap-3">
             <ShoppingBag className="text-yellow-500" size={40} /> The Magic Shop
           </h1>
           <p className="text-lg text-slate-500 font-medium mt-2">Spend your coins on awesome upgrades!</p>
         </div>
-        <button 
-          onClick={() => setShowShop(false)}
-          className="w-12 h-12 bg-slate-100 text-slate-600 rounded-full flex items-center justify-center hover:bg-slate-200 transition-colors"
-        >
-          <X size={24} />
-        </button>
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="bg-yellow-100 text-yellow-800 font-black px-5 py-3 rounded-2xl border-4 border-yellow-200 shadow-sm flex items-center gap-2">
+            <span className="text-xl">💰</span>
+            <span>{coins}</span>
+          </div>
+          <button
+            onClick={() => setShowShop(false)}
+            className="w-12 h-12 bg-slate-100 text-slate-600 rounded-full flex items-center justify-center hover:bg-slate-200 transition-colors"
+          >
+            <X size={24} />
+          </button>
+        </div>
       </div>
 
       <div className="flex gap-4 mb-6 border-b-4 border-slate-100 pb-4">
@@ -2216,14 +2314,28 @@ export default function App() {
       return renderDashboard(accounts[selectedProfileName], () => setSelectedProfileName(null));
     }
 
-    const topUsers = (SUPABASE_ENABLED ? remoteLeaderboard : (Object.values(accounts) as UserAccount[]))
-      .filter(user => (user.modeStats[gameMode]?.gamesPlayed || 0) > 0)
-      .sort((a, b) => {
-        const bStats = b.modeStats[gameMode];
-        const aStats = a.modeStats[gameMode];
-        return (bStats?.bestScore || 0) - (aStats?.bestScore || 0);
+    const localTopEarners = (Object.values(accounts) as UserAccount[])
+      .map<TopEarner | null>(user => {
+        const bestGame = user.recentGames
+          .filter(game => game.mode === gameMode && game.difficulty === difficulty)
+          .sort((a, b) => b.score - a.score || b.accuracy - a.accuracy)[0];
+
+        if (!bestGame) return null;
+
+        return {
+          username: user.username,
+          displayName: user.displayName || user.username,
+          avatarName: user.avatarName || 'Guide',
+          avatar: user.avatar || '🐶',
+          score: bestGame.score,
+          accuracy: bestGame.accuracy,
+          achievedAt: bestGame.date
+        };
       })
-      .slice(0, 10);
+      .filter((entry): entry is TopEarner => Boolean(entry))
+      .sort((a, b) => b.score - a.score || b.accuracy - a.accuracy)
+      .slice(0, 15);
+    const topEarners = SUPABASE_ENABLED ? remoteLeaderboard : localTopEarners;
     
     return (
     <motion.div 
@@ -2379,33 +2491,38 @@ export default function App() {
         </div>
 
         <section className="w-full max-w-md bg-slate-50 p-6 rounded-3xl border-4 border-slate-100 flex flex-col min-h-[260px] max-h-[420px] mb-8">
-          <h2 className="text-2xl font-black text-slate-800 mb-6 uppercase tracking-tight flex items-center justify-center gap-2 shrink-0">
+          <h2 className="text-2xl font-black text-slate-800 mb-2 uppercase tracking-tight flex items-center justify-center gap-2 shrink-0">
             <Trophy className="text-amber-500" /> Top Earners
           </h2>
-          {topUsers.length === 0 ? (
+          <div className="text-xs font-black uppercase tracking-wider text-slate-400 text-center mb-6">
+            {GAME_MODE_LABELS[gameMode]} · {DIFFICULTY_LABELS[difficulty]}
+          </div>
+          {topEarners.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center text-slate-400 font-medium text-center">
               <div className="text-4xl mb-4 opacity-50">🌟</div>
               <p>No earners yet.<br/>Be the first!</p>
             </div>
           ) : (
-            <div className="flex flex-col gap-4 overflow-y-auto pr-1 pb-4">
-              {topUsers.map((entry, i) => {
-                const stats = entry.modeStats[gameMode];
-                return (
-                  <button
-                    key={entry.username}
-                    onClick={() => handleOpenProfile(entry.username)}
-                    className="bg-white p-4 rounded-2xl shadow-sm border-2 border-slate-100 flex items-center gap-3 text-left hover:border-amber-200 hover:scale-[1.01] transition-all"
-                  >
-                    <div className="text-2xl">{entry.avatar}</div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-bold text-slate-800 truncate">{i + 1}. {entry.username}</div>
-                      <div className="text-xs text-slate-400 font-bold uppercase tracking-wider truncate">{entry.displayName || entry.username} · {stats?.bestAccuracy || 0}% acc</div>
+            <div className="flex flex-col gap-4 overflow-y-auto pr-1 pb-4 max-h-[20rem]">
+              {topEarners.map((entry, i) => (
+                <button
+                  key={`${entry.username}-${entry.score}-${entry.achievedAt}`}
+                  onClick={() => handleOpenProfile(entry.username)}
+                  className="bg-white p-4 rounded-2xl shadow-sm border-2 border-slate-100 flex items-center gap-3 text-left hover:border-amber-200 hover:scale-[1.01] transition-all shrink-0"
+                >
+                  <div className="text-2xl">{entry.avatar}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold text-slate-800 truncate">{i + 1}. {entry.username}</div>
+                    <div className="text-xs text-slate-400 font-bold uppercase tracking-wider truncate">
+                      {entry.displayName || entry.username} · {entry.accuracy}% acc
                     </div>
-                    <div className="font-black text-yellow-600 text-xl flex items-center gap-1">💰{stats?.bestScore || 0}</div>
-                  </button>
-                );
-              })}
+                    <div className="text-[11px] text-slate-300 font-black uppercase tracking-wider truncate">
+                      Hit top {formatTopEarnerDate(entry.achievedAt)}
+                    </div>
+                  </div>
+                  <div className="font-black text-yellow-600 text-xl flex items-center gap-1">💰{entry.score}</div>
+                </button>
+              ))}
             </div>
           )}
         </section>
@@ -2602,7 +2719,11 @@ export default function App() {
             <div className="mb-3 text-xs font-black text-rose-500">{publicChatError}</div>
           )}
 
-          <div className="flex-1 min-h-[360px] overflow-y-auto space-y-3 pr-1">
+          <div
+            className="flex-1 min-h-[360px] overflow-y-auto space-y-3 pr-1"
+            style={{ maxHeight: `${CHAT_VISIBLE_MESSAGE_LIMIT * 5.25}rem` }}
+            aria-label={`Recent public chat messages, showing up to ${CHAT_SAVED_MESSAGE_LIMIT}`}
+          >
             {publicChatMessages.length === 0 ? (
               <div className="h-full flex items-center justify-center text-center text-slate-400 font-bold">
                 No comments yet.
@@ -2610,10 +2731,29 @@ export default function App() {
             ) : publicChatMessages.map(message => (
               <div key={message.id} className="bg-slate-50 border-2 border-slate-100 rounded-2xl p-3">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xl">{message.avatar}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleOpenProfile(message.username)}
+                    className="text-xl hover:scale-110 transition-transform"
+                    aria-label={`Open ${message.displayName}'s profile`}
+                  >
+                    {message.avatar}
+                  </button>
                   <div className="min-w-0">
-                    <div className="font-black text-slate-700 text-sm truncate">{message.displayName}</div>
-                    <div className="text-[11px] font-bold text-slate-400">@{message.username} · {formatChatTime(message.createdAt)}</div>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenProfile(message.username)}
+                      className="block max-w-full text-left font-black text-slate-700 text-sm truncate hover:text-indigo-500"
+                    >
+                      {message.displayName}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenProfile(message.username)}
+                      className="block max-w-full text-left text-[11px] font-bold text-slate-400 truncate hover:text-indigo-400"
+                    >
+                      @{message.username} · {formatChatTime(message.createdAt)}
+                    </button>
                   </div>
                 </div>
                 <div className="font-bold text-slate-600 text-sm break-words">{message.message}</div>
