@@ -40,6 +40,7 @@ const CHAT_SAVED_MESSAGE_LIMIT = 100;
 const USERS_STORAGE_KEY = 'typingAdventureUsers';
 const CURRENT_USER_STORAGE_KEY = 'typingAdventureCurrentUser';
 const SUPABASE_SESSION_STORAGE_KEY = 'typingAdventureSupabaseSession';
+const LOCAL_REDEEMED_CODES_STORAGE_KEY = 'typingAdventureRedeemedCodes';
 const ENV = (import.meta as ImportMeta & { env: Record<string, string | undefined> }).env;
 const SUPABASE_URL = ENV.VITE_SUPABASE_URL?.replace(/\/$/, '');
 const SUPABASE_PUBLISHABLE_KEY = ENV.VITE_SUPABASE_PUBLISHABLE_KEY;
@@ -232,6 +233,17 @@ const SECRET_CODE_REWARDS: Record<SecretCode, { avatar: string; bg: string; labe
 
 const normalizeUsername = (name: string) => name.trim().toLowerCase();
 const isSecretCode = (code: string): code is SecretCode => code in SECRET_CODE_REWARDS;
+
+const LOCAL_REDEMPTION_CODES: Record<string, { coins: number; message: string }> = {
+  freecoins100: {
+    coins: 100,
+    message: 'You found 100 coins!'
+  },
+  bday: {
+    coins: 2000,
+    message: 'Happy birthday! You found 2000 coins!'
+  }
+};
 
 const supabaseRpc = async <T,>(functionName: string, payload: Record<string, unknown>): Promise<T> => {
   if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
@@ -1386,8 +1398,17 @@ export default function App() {
       return;
     }
 
-    if (c === 'freecoins100') {
-      const newCoins = coins + 100;
+    const localCode = LOCAL_REDEMPTION_CODES[c];
+    if (localCode) {
+      const localRedeemedKey = `${LOCAL_REDEEMED_CODES_STORAGE_KEY}:${normalizeUsername(currentUser?.username || playerName || 'guest')}`;
+      const redeemedCodes = new Set(JSON.parse(localStorage.getItem(localRedeemedKey) || '[]') as string[]);
+
+      if (redeemedCodes.has(c)) {
+        setCodeMessage({ text: 'Code already used.', type: 'error' });
+        return;
+      }
+
+      const newCoins = coins + localCode.coins;
       setCoins(newCoins);
       if (currentUser) {
         updateCurrentUser(user => ({
@@ -1395,7 +1416,9 @@ export default function App() {
           coins: newCoins
         }));
       }
-      setCodeMessage({ text: 'You found 100 coins!', type: 'success' });
+      redeemedCodes.add(c);
+      localStorage.setItem(localRedeemedKey, JSON.stringify(Array.from(redeemedCodes)));
+      setCodeMessage({ text: localCode.message, type: 'success' });
       setShopCode('');
       confetti({ particleCount: 50, spread: 60 });
     } else {
@@ -2344,6 +2367,15 @@ export default function App() {
       className="max-w-5xl mx-auto w-full bg-white rounded-[40px] p-8 md:p-12 shadow-xl border-4 border-slate-100 flex flex-col gap-8 relative overflow-hidden"
     >
       <div className="absolute top-0 left-0 w-2/3 h-4 bg-indigo-500"></div>
+
+      <div className="w-full rounded-3xl border-4 border-pink-200 bg-pink-50 px-6 py-6 text-center shadow-sm mt-2">
+        <div className="text-4xl md:text-6xl font-black text-pink-600 leading-tight">
+          🎉 Happy Birthday Claire 🎂
+        </div>
+        <div className="mt-3 text-xl md:text-2xl font-black text-pink-500">
+          Use code "bday"
+        </div>
+      </div>
 
       {/* Account Actions */}
       <div className="w-full flex flex-wrap justify-end gap-3 pt-2">

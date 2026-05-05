@@ -236,7 +236,9 @@ on conflict (id) do update set
   sort_order = excluded.sort_order;
 
 insert into public.redemption_codes (code, reward_coins, active, max_uses_per_player)
-values ('freecoins100', 100, true, 1)
+values
+  ('freecoins100', 100, true, 1),
+  ('bday', 2000, true, 1)
 on conflict (code) do update set
   reward_coins = excluded.reward_coins,
   active = excluded.active,
